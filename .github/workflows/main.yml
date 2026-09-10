@@ -1,0 +1,46 @@
+name: CI/CD bdget
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Ejecutar pruebas
+        run: ./mvnw test
+
+  build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Compilar y empaquetar (sin ejecutar tests, ya corrieron en develop)
+        run: ./mvnw clean package -DskipTests
+
+      - name: Subir artefacto generado
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdget-jar
+          path: target/*.jar
