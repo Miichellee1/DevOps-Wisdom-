@@ -1,0 +1,11 @@
+# Garantiza al menos 1 replica disponible durante mantenimientos del cluster
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bdget-pdb
+  namespace: bdget
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: bdget

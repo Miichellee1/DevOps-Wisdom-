@@ -1,0 +1,17 @@
+# Configuracion no sensible del microservicio (config fuera de la imagen)
+# La clave de la base de datos NO se versiona: el pipeline crea el Secret "bdget-db-secret"
+# con una clave aleatoria en cada despliegue (ver README, seccion Kubernetes).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bdget-config
+  namespace: bdget
+  labels:
+    app: bdget
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  DB_HOST: "bdget-db"
+  DB_PORT: "5432"
+  DB_NAME: "bdget"
+  DB_USER: "bdget"
+  JAVA_TOOL_OPTIONS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"

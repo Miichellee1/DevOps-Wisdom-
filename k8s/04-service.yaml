@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: bdget-service
+  namespace: bdget
   labels:
     app: bdget
 spec:
@@ -11,5 +12,5 @@ spec:
   ports:
     - protocol: TCP
       port: 8080
-      targetPort: 8080
+      targetPort: http
       nodePort: 30080
