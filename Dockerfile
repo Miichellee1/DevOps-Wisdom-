@@ -1,7 +1,7 @@
 # ==============================================================
 # Etapa 1: Build y empaquetado del microservicio (JDK 17 Temurin)
 # ==============================================================
-FROM eclipse-temurin:17-jdk AS buildstage
+FROM eclipse-temurin:25-jdk AS buildstage
 
 RUN apt-get update && apt-get install -y --no-install-recommends maven && rm -rf /var/lib/apt/lists/*
 
@@ -17,7 +17,7 @@ RUN mvn clean package -DskipTests
 # ==============================================================
 # Etapa 2: Imagen final de ejecucion liviana y segura (JRE 17)
 # ==============================================================
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:25-jre
 
 # Metadatos del contenedor (Estandar OCI)
 LABEL maintainer="Duoc UC DevOps Team <va.ruizi@duocuc.cl>"
