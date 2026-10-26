@@ -1,69 +1,158 @@
-name: CI/CD bdget Pipeline
+name: Pipeline CI/CD DevSecOps y Despliegue Orquestado
 
 on:
   push:
     branches:
+      - main
       - develop
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
-  test:
-    name: Pruebas Unitarias y Calidad (CI)
+  # ==============================================================
+  # 1. Pruebas Automatizadas y Cobertura de Calidad (IE2)
+  # ==============================================================
+  unit-tests:
+    name: 1. Pruebas Unitarias y Cobertura (JUnit 5 + JaCoCo)
     runs-on: ubuntu-latest
     steps:
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar JDK 17
+      - name: Configurar JDK 17 Temurin
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Otorgar permisos de ejecucion a Maven Wrapper
+      - name: Asignar permisos de ejecucion a Maven Wrapper
         run: chmod +x mvnw
 
-      - name: Ejecutar pruebas unitarias
-        run: ./mvnw test
+      - name: Ejecutar pruebas unitarias (18 tests)
+        run: ./mvnw clean test
 
       - name: Subir reporte de cobertura JaCoCo
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: jacoco-report
+          name: jacoco-coverage-report
           path: target/site/jacoco/
           if-no-files-found: ignore
 
-  build:
-    name: Empaquetado y Entorno Cloud Simulado (CD)
-    needs: test
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+  # ==============================================================
+  # 2. Analisis de Seguridad, Escaneo SCA y Bloqueo (IE3)
+  # ==============================================================
+  security-scan:
+    name: 2. Escaneo de Vulnerabilidades y Bloqueo de Seguridad (SCA)
+    needs: unit-tests
     runs-on: ubuntu-latest
     steps:
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar JDK 17
-        uses: actions/setup-java@v4
+      - name: Escaneo de dependencias y codigo fuente (Trivy SCA)
+        uses: aquasecurity/trivy-action@master
         with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'maven'
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0' # Permite visualizacion de alertas de seguridad
 
-      - name: Otorgar permisos de ejecucion a Maven Wrapper
-        run: chmod +x mvnw
-
-      - name: Compilar y empaquetar aplicacion (JAR)
-        run: ./mvnw clean package -DskipTests
-
-      - name: Subir artefacto generado (JAR)
-        uses: actions/upload-artifact@v4
+      - name: Politica de Seguridad Estricta (Bloqueo por vulnerabilidades criticas)
+        uses: aquasecurity/trivy-action@master
         with:
-          name: bdget-jar
-          path: target/*.jar
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL'
+          exit-code: '1' # BLOQUEO: Falla el pipeline si existen vulnerabilidades CRITICAL
 
-      - name: Construir imagen Docker en entorno Cloud Simulado
-        run: docker build -t bdget:latest .
+  # ==============================================================
+  # 3. Construccion de Contenedor Docker Optimizado (IE1)
+  # ==============================================================
+  build-container:
+    name: 3. Construccion y Hardening de Contenedor Docker (OCI)
+    needs: security-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir imagen Docker multi-etapa
+        run: |
+          docker build \
+            --tag bdget:1.0.0 \
+            --tag bdget:latest \
+            --file Dockerfile .
+
+      - name: Escaneo de seguridad sobre la imagen Docker
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'bdget:latest'
+          format: 'table'
+          severity: 'CRITICAL'
+          exit-code: '0'
+
+  # ==============================================================
+  # 4. Despliegue Automatizado y Orquestacion en Entorno Cloud (IE4 e IE5)
+  # ==============================================================
+  deploy-simulation:
+    name: 4. Despliegue en Entorno Cloud Simulado y Smoke Test
+    needs: build-container
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Validar manifiestos de Kubernetes (Dry Run)
+        run: |
+          echo "Validando manifiestos de Kubernetes con kubectl..."
+          kubectl apply --dry-run=client -f k8s/
+
+      - name: Levantar orquestacion con Docker Compose
+        run: |
+          echo "Iniciando servicios con Docker Compose..."
+          docker compose up -d --build
+
+      - name: Smoke Test y Verificacion de Salud (Health Check en vivo)
+        run: |
+          echo "Esperando arranque y estabilizacion del microservicio en el entorno cloud..."
+          sleep 20
+          
+          SUCCESS=false
+          for i in {1..12}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/students || true)
+            echo "Intento $i: Endpoint /students respondio con codigo HTTP $STATUS"
+            if [ "$STATUS" -eq 200 ]; then
+              SUCCESS=true
+              break
+            fi
+            sleep 5
+          done
+
+          if [ "$SUCCESS" = false ]; then
+            echo "Error: El microservicio no respondio HTTP 200 dentro del tiempo esperado."
+            docker compose logs
+            exit 1
+          fi
+
+          echo "Verificando endpoint de conteo de estudiantes..."
+          curl -f -s http://localhost:8080/students/count || exit 1
+          echo ""
+          echo "Despliegue y verificacion completados exitosamente en entorno cloud simulado."
+
+      - name: Registrar logs de trazabilidad
+        if: always()
+        run: |
+          docker compose logs --tail=100
+
+      - name: Detener orquestacion
+        if: always()
+        run: |
+          docker compose down
