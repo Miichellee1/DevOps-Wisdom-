@@ -82,4 +82,12 @@ class StudentControllerTest {
                 .andExpect(status().isOk());
         verify(service).deleteStudent(1L);
     }
+
+    @Test
+    void testSearchStudents() throws Exception {
+        when(service.searchStudentsByName("John")).thenReturn(Arrays.asList(student));
+        mockMvc.perform(get("/students/search").param("name", "John"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(mapper.writeValueAsString(Arrays.asList(student))));
+    }
 }
