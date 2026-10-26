@@ -1,0 +1,13 @@
+# ==============================================================
+# Excepciones de seguridad aceptadas (gobernanza de riesgos)
+# Cada excepcion se documenta, se justifica y expira: al vencer, el pipeline
+# vuelve a bloquear y el equipo debe revisar si ya existe parche.
+# ==============================================================
+
+# spring-webmvc 6.2.x: RCE en XsltView. Corregido solo en Spring Framework 7.0.9 (Spring Boot 4).
+# No aplica: el microservicio es una API REST JSON y no usa XsltView ni renderizado de vistas.
+CVE-2026-47884 exp:2027-01-31
+
+# spring-webmvc 6.2.x: corrupcion de stream en SSE con view fragments. Corregido solo en 7.0.9.
+# No aplica: el microservicio no expone Server-Sent Events ni view fragments.
+CVE-2026-47890 exp:2027-01-31
