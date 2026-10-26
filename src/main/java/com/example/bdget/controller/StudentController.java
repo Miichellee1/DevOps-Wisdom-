@@ -40,6 +40,16 @@ public class StudentController {
         return studentService.getStudentById(id);
     }
 
+    @GetMapping("/search")
+    public List<Student> searchStudents(@RequestParam String name) {
+        return studentService.searchStudentsByName(name);
+    }
+
+    @GetMapping("/count")
+    public long countStudents() {
+        return studentService.countTotalStudents();
+    }
+
     @PostMapping
     public Student creaStudent(@RequestBody Student student) {
         return studentService.createStudent(student);

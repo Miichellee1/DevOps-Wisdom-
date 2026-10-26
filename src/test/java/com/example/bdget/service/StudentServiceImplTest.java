@@ -76,4 +76,21 @@ class StudentServiceImplTest {
         service.deleteStudent(1L);
         verify(repository).deleteById(1L);
     }
+
+    @Test
+    void testSearchStudentsByName() {
+        List<Student> expected = Arrays.asList(student);
+        when(repository.findByNameContainingIgnoreCase("John")).thenReturn(expected);
+        List<Student> result = service.searchStudentsByName("John");
+        assertEquals(expected, result);
+        verify(repository).findByNameContainingIgnoreCase("John");
+    }
+
+    @Test
+    void testCountTotalStudents() {
+        when(repository.count()).thenReturn(5L);
+        long count = service.countTotalStudents();
+        assertEquals(5L, count);
+        verify(repository).count();
+    }
 }

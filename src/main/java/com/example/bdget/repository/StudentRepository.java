@@ -5,5 +5,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import com.example.bdget.model.Student;
 
 public interface StudentRepository extends JpaRepository<Student, Long>{
-    
+    java.util.List<Student> findByNameContainingIgnoreCase(String name);
 }
