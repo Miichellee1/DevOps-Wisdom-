@@ -1,4 +1,4 @@
-name: CI/CD bdget
+name: CI/CD bdget Pipeline
 
 on:
   push:
@@ -10,37 +10,60 @@ on:
 
 jobs:
   test:
-    if: github.ref == 'refs/heads/develop'
+    name: Pruebas Unitarias y Calidad (CI)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
 
       - name: Configurar JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'maven'
 
-      - name: Ejecutar pruebas
+      - name: Otorgar permisos de ejecucion a Maven Wrapper
+        run: chmod +x mvnw
+
+      - name: Ejecutar pruebas unitarias
         run: ./mvnw test
 
+      - name: Subir reporte de cobertura JaCoCo
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+          if-no-files-found: ignore
+
   build:
-    if: github.event_name == 'pull_request'
+    name: Empaquetado y Entorno Cloud Simulado (CD)
+    needs: test
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
 
       - name: Configurar JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'maven'
 
-      - name: Compilar y empaquetar (sin ejecutar tests, ya corrieron en develop)
+      - name: Otorgar permisos de ejecucion a Maven Wrapper
+        run: chmod +x mvnw
+
+      - name: Compilar y empaquetar aplicacion (JAR)
         run: ./mvnw clean package -DskipTests
 
-      - name: Subir artefacto generado
+      - name: Subir artefacto generado (JAR)
         uses: actions/upload-artifact@v4
         with:
           name: bdget-jar
           path: target/*.jar
+
+      - name: Construir imagen Docker en entorno Cloud Simulado
+        run: docker build -t bdget:latest .
