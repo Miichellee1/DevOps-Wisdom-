@@ -90,4 +90,12 @@ class StudentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().json(mapper.writeValueAsString(Arrays.asList(student))));
     }
+
+    @Test
+    void testCountStudents() throws Exception {
+        when(service.countTotalStudents()).thenReturn(10L);
+        mockMvc.perform(get("/students/count"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("10"));
+    }
 }

@@ -85,4 +85,12 @@ class StudentServiceImplTest {
         assertEquals(expected, result);
         verify(repository).findByNameContainingIgnoreCase("John");
     }
+
+    @Test
+    void testCountTotalStudents() {
+        when(repository.count()).thenReturn(5L);
+        long count = service.countTotalStudents();
+        assertEquals(5L, count);
+        verify(repository).count();
+    }
 }
