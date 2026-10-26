@@ -57,6 +57,13 @@ class StudentControllerTest {
     }
 
     @Test
+    void testGetStudentByIdNotFound() throws Exception {
+        when(service.getStudentById(99L)).thenReturn(Optional.empty());
+        mockMvc.perform(get("/students/99"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void testCreateStudent() throws Exception {
         when(service.createStudent(any(Student.class))).thenReturn(student);
         mockMvc.perform(post("/students")
