@@ -48,4 +48,9 @@ public class StudentServiceImpl implements StudentService{
     public List<Student> searchStudentsByName(String name) {
         return studentRepository.findByNameContainingIgnoreCase(name);
     }
+
+    @Override
+    public long countTotalStudents() {
+        return studentRepository.count();
+    }
 }
