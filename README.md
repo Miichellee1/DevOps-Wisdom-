@@ -1,8 +1,8 @@
 # bdget 🎓 — Microservicio de Gestión de Estudiantes
 
 [![Pipeline CI/CD DevSecOps](https://github.com/Miichellee1/DevOps-Wisdom-/actions/workflows/main.yml/badge.svg)](https://github.com/Miichellee1/DevOps-Wisdom-/actions/workflows/main.yml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Miichellee1_DevOps-Wisdom-&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Miichellee1_DevOps-Wisdom-)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Miichellee1_DevOps-Wisdom-&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Miichellee1_DevOps-Wisdom-)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Miichellee1_DevOps-Wisdom&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Miichellee1_DevOps-Wisdom)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Miichellee1_DevOps-Wisdom&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Miichellee1_DevOps-Wisdom)
 
 > **Evaluación Parcial N°2: "Añadiéndole complejidad a nuestro pipeline"**
 > **Asignatura:** Ingeniería DevOps (DOY0101) — Duoc UC
@@ -186,7 +186,7 @@ Gracias a estos escaneos se detectaron y corrigieron vulnerabilidades reales: se
 * **Pipeline:** permisos mínimos (`permissions: contents: read` y permisos extra solo por job), acción de Trivy fijada por SHA (protección de la cadena de suministro), `concurrency` para evitar despliegues simultáneos.
 * **Docker Compose:** `read_only`, `cap_drop: ALL`, `no-new-privileges`, red `backend` interna (la base de datos no se expone), límites de CPU/memoria en todos los servicios.
 * **Kubernetes:** Pod Security Standard `restricted`, `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault`, sin token de ServiceAccount, `ResourceQuota` en el namespace, secretos generados en el despliegue (nunca versionados).
-* **Aplicación:** consola H2 deshabilitada fuera de desarrollo, logs en nivel INFO/WARN, los errores 500 no exponen detalles internos, validación de entrada con Bean Validation.
+* **Aplicación:** consola H2 deshabilitada fuera de desarrollo, logs en nivel INFO/WARN, los errores 500 no exponen detalles internos, validación de entrada con Bean Validation sobre un DTO (la entidad JPA no se expone en la API), inyección de dependencias por constructor y sin CORS abierto.
 
 ### Parámetros de escalabilidad
 | Parámetro | Docker Compose | Kubernetes |
@@ -244,7 +244,7 @@ La debe realizar la dueña del repositorio (**Miichellee1**):
 
 1. **SonarCloud:**
    1. Entrar a [sonarcloud.io](https://sonarcloud.io) con GitHub → *Analyze new project* → importar la organización `miichellee1` y el repositorio `DevOps-Wisdom-`.
-   2. Verificar que la *Organization Key* sea `miichellee1` y la *Project Key* `Miichellee1_DevOps-Wisdom-` (si son distintas, actualizar `sonar.organization` y `sonar.projectKey` en `pom.xml`).
+   2. Verificar que la *Organization Key* sea `miichellee1` y la *Project Key* `Miichellee1_DevOps-Wisdom` (si son distintas, actualizar `sonar.organization` y `sonar.projectKey` en `pom.xml`).
    3. En el proyecto: *Administration → Analysis Method* → **desactivar "Automatic Analysis"** (el análisis lo hace el pipeline).
    4. *My Account → Security* → generar un token.
    5. En GitHub: *Settings → Secrets and variables → Actions → New repository secret* → nombre **`SONAR_TOKEN`**.

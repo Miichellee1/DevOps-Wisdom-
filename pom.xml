@@ -25,7 +25,7 @@
 		<jacoco.minimum.coverage>0.80</jacoco.minimum.coverage>
 		<!-- Analisis estatico en SonarCloud (IE3) -->
 		<sonar.organization>miichellee1</sonar.organization>
-		<sonar.projectKey>Miichellee1_DevOps-Wisdom-</sonar.projectKey>
+		<sonar.projectKey>Miichellee1_DevOps-Wisdom</sonar.projectKey>
 		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
 		<sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
 	</properties>

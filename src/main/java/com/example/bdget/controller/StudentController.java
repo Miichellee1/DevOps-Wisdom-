@@ -2,9 +2,7 @@ package com.example.bdget.controller;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,17 +13,21 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.bdget.dto.StudentRequest;
 import com.example.bdget.model.Student;
 import com.example.bdget.service.StudentService;
 
 import jakarta.validation.Valid;
 
+// Sin CORS abierto: la API se consume a traves del gateway del mismo origen
 @RestController
 @RequestMapping("/students")
-@CrossOrigin(origins = "${app.cors.allowed-origins:*}")
 public class StudentController {
-    @Autowired
-    private StudentService studentService;
+    private final StudentService studentService;
+
+    public StudentController(StudentService studentService) {
+        this.studentService = studentService;
+    }
 
     @GetMapping
     public List<Student> getAllStudents(){
@@ -49,15 +51,15 @@ public class StudentController {
         return studentService.countTotalStudents();
     }
 
-    // @Valid activa las reglas de Bean Validation definidas en Student
+    // @Valid activa las reglas de Bean Validation definidas en el DTO StudentRequest
     @PostMapping
-    public Student creaStudent(@Valid @RequestBody Student student) {
-        return studentService.createStudent(student);
+    public Student creaStudent(@Valid @RequestBody StudentRequest request) {
+        return studentService.createStudent(request.toEntity());
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Student> updateStudent(@PathVariable Long id, @Valid @RequestBody Student student) {
-        Student updated = studentService.updateStudent(id, student);
+    public ResponseEntity<Student> updateStudent(@PathVariable Long id, @Valid @RequestBody StudentRequest request) {
+        Student updated = studentService.updateStudent(id, request.toEntity());
         return updated != null ? ResponseEntity.ok(updated) : ResponseEntity.notFound().build();
     }
 
