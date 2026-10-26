@@ -84,10 +84,71 @@ class StudentControllerTest {
     }
 
     @Test
+    void testUpdateStudentNotFound() throws Exception {
+        when(service.updateStudent(eq(99L), any(Student.class))).thenReturn(null);
+        mockMvc.perform(put("/students/99")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(student)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void testDeleteStudent() throws Exception {
+        when(service.getStudentById(1L)).thenReturn(Optional.of(student));
         mockMvc.perform(delete("/students/1"))
-                .andExpect(status().isOk());
+                .andExpect(status().isNoContent());
         verify(service).deleteStudent(1L);
+    }
+
+    @Test
+    void testDeleteStudentNotFound() throws Exception {
+        when(service.getStudentById(99L)).thenReturn(Optional.empty());
+        mockMvc.perform(delete("/students/99"))
+                .andExpect(status().isNotFound());
+        verify(service, never()).deleteStudent(99L);
+    }
+
+    @Test
+    void testCreateStudentInvalidNameReturnsBadRequest() throws Exception {
+        Student invalid = new Student();
+        invalid.setName("J0hn!");
+        mockMvc.perform(post("/students")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(invalid)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.name").exists());
+        verify(service, never()).createStudent(any());
+    }
+
+    @Test
+    void testCreateStudentBlankNameReturnsBadRequest() throws Exception {
+        Student invalid = new Student();
+        invalid.setName("");
+        mockMvc.perform(post("/students")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(invalid)))
+                .andExpect(status().isBadRequest());
+        verify(service, never()).createStudent(any());
+    }
+
+    @Test
+    void testRuntimeExceptionReturnsBadRequest() throws Exception {
+        when(service.getAllStudents()).thenThrow(new IllegalStateException("Error de negocio"));
+        mockMvc.perform(get("/students"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Error de negocio"))
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void testCheckedExceptionReturnsInternalServerError() throws Exception {
+        when(service.countTotalStudents()).thenAnswer(invocation -> {
+            throw new Exception("Fallo interno");
+        });
+        mockMvc.perform(get("/students/count"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("An unexpected error occurred"))
+                .andExpect(jsonPath("$.details").doesNotExist());
     }
 
     @Test
