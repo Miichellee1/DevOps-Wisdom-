@@ -1,0 +1,4 @@
+# Scripts de shell siempre con fin de linea LF (evita fallos en Linux/Docker)
+mvnw text eol=lf
+*.sh text eol=lf
+*.cmd text eol=crlf
