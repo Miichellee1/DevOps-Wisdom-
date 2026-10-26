@@ -3,6 +3,8 @@ updates:
   # Escaneo y actualizacion automatica de dependencias Maven (Java)
   - package-ecosystem: "maven"
     directory: "/"
+    # GitFlow: las actualizaciones entran por develop y llegan a main en un release
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -10,22 +12,64 @@ updates:
       - "dependencies"
       - "security"
       - "maven"
+    commit-message:
+      prefix: "chore(deps)"
+    # Parches y versiones menores en un solo PR para reducir ruido
+    groups:
+      maven-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Saltos de version mayor (Spring Boot 4, Spring Cloud 2025.1) requieren migracion planificada
+      - dependency-name: "org.springframework.boot:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springframework.cloud:spring-cloud-dependencies"
+        versions: [">= 2025.1.0"]
 
   # Escaneo y actualizacion de acciones de GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
     labels:
       - "ci/cd"
       - "security"
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   # Escaneo y actualizacion de imagenes base en Dockerfile
   - package-ecosystem: "docker"
     directory: "/"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     labels:
       - "docker"
       - "security"
+    commit-message:
+      prefix: "chore(docker)"
+    ignore:
+      # El microservicio se compila para Java 17: no se migra la imagen base a otra version mayor de Java
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "maven"
+        versions: [">= 4"]
+
+  # Imagenes usadas en docker-compose.yml (PostgreSQL y nginx)
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "docker"
+      - "security"
+    commit-message:
+      prefix: "chore(docker)"
