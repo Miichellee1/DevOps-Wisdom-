@@ -35,7 +35,7 @@ jobs:
         run: ./mvnw clean test
 
       - name: Subir reporte de cobertura JaCoCo
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: jacoco-coverage-report
