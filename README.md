@@ -1,7 +1,8 @@
 # bdget 🎓 — Microservicio de Gestión de Estudiantes
-> **Evaluación Parcial N°1: "Tu primer pipeline de despliegue"**  
+
+> **Evaluación Parcial N°1 & N°2: "Añadiéndole complejidad a nuestro pipeline"**  
 > **Asignatura:** Ingeniería DevOps (DOY0101) — Duoc UC  
-> **Ponderación:** 25%  
+> **Ponderación Evaluación 1:** 25% | **Ponderación Evaluación 2:** 45%  
 
 ---
 
@@ -16,281 +17,188 @@
 
 ---
 
-## 📖 Descripción del Proyecto
+## 📖 Descripción General del Proyecto
 
-`bdget` es un microservicio REST desarrollado en **Java 17 + Spring Boot 3** para la administración de estudiantes (operaciones CRUD, búsqueda y métricas). Cuenta con persistencia en base de datos H2 en memoria, suite de pruebas unitarias automatizadas con JUnit 5 y Mockito, generación de reportes de cobertura con JaCoCo, y un pipeline de integración y entrega continua (CI/CD) ejecutado en la nube mediante **GitHub Actions**.
+`bdget` es un microservicio REST desarrollado en **Java 17 + Spring Boot 3** para la gestión integral de estudiantes (CRUD, búsqueda por nombre y métricas estadísticas). El proyecto incorpora un ciclo de vida de desarrollo DevOps y DevSecOps completamente automatizado mediante **GitHub Actions**, incluyendo:
+
+1. **Suite de Pruebas Automatizadas:** 18 tests unitarios con JUnit 5 y Mockito, con análisis de cobertura de código vía **JaCoCo**.
+2. **Seguridad y Análisis de Vulnerabilidades (DevSecOps):** Escaneo continuo de dependencias con **Dependabot**, escaneo de seguridad estático y de contenedores con **Trivy / Snyk**, y políticas de bloqueo (*Security Gates*).
+3. **Contenerización y Hardening:** `Dockerfile` multi-etapa optimizado con imagen liviana Eclipse Temurin 17 JRE y ejecución con usuario sin privilegios de root.
+4. **Orquestación y Escalabilidad:** Arquitectura orquestada mediante **Docker Compose** y manifiestos de **Kubernetes** (`k8s/`) con definición de límites de recursos, sondas de salud (*liveness/readiness probes*) y escalamiento horizontal (*HPA*).
+5. **Despliegue Automatizado y Smoke Testing:** Despliegue en un entorno cloud simulado (runners de GitHub Actions) con validación automática en vivo (*Health Checks*).
 
 ---
 
 ## 🚀 Cómo Levantar el Proyecto Localmente
 
-### Requisitos Previos
-* JDK 17 o superior instalado.
-* Git.
-* No requiere instalación previa de Maven (se incluye Maven Wrapper `./mvnw`).
-
-### 1. Ejecutar la aplicación
+### Opción 1: Ejecución con Maven Wrapper (Nativo)
 ```bash
-# En Linux / macOS
-./mvnw spring-boot:run
+# Ejecutar la aplicacion
+./mvnw spring-boot:run          # Linux / macOS
+.\mvnw.cmd spring-boot:run      # Windows
 
-# En Windows (PowerShell / CMD)
-.\mvnw.cmd spring-boot:run
+# Ejecutar las 18 pruebas unitarias y generar reporte JaCoCo
+./mvnw clean test               # Linux / macOS
+.\mvnw.cmd clean test           # Windows
 ```
-La API queda disponible en `http://localhost:8080/students`.
+* **API REST:** `http://localhost:8080/students`
+* **Consola H2 (en memoria):** `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:mem:bdgetdb`, usuario: `sa`, sin contraseña).
 
-### 2. Consola de Base de Datos H2
-La base de datos es H2 en memoria (`jdbc:h2:mem:bdgetdb`). No requiere credenciales ni configuración externa y se reinicia en cada arranque. Con la aplicación corriendo, se puede acceder a la consola web en:
-* **URL:** `http://localhost:8080/h2-console`
-* **JDBC URL:** `jdbc:h2:mem:bdgetdb`
-* **Usuario:** `sa`
-* **Contraseña:** *(vacía)*
-
-### 3. Ejecutar la suite de pruebas unitarias
+### Opción 2: Ejecución Orquestada con Docker Compose
 ```bash
-# En Linux / macOS
-./mvnw test
+# Construir la imagen y levantar el servicio en segundo plano
+docker compose up -d --build
 
-# En Windows
-.\mvnw.cmd test
+# Verificar el estado y salud del contenedor
+docker compose ps
+
+# Ver logs en tiempo real
+docker compose logs -f
+
+# Detener los servicios
+docker compose down
 ```
-*Las pruebas se ejecutan de manera aislada en un puerto dinámico (`server.port=0`) y generan automáticamente el reporte de cobertura JaCoCo en `target/site/jacoco/index.html`.*
 
 ---
 
-## 📁 Estructura del Proyecto y Arquitectura de Carpetas
-
-El microservicio implementa una **arquitectura en capas desacoplada**, siguiendo las mejores prácticas de desarrollo y el principio de responsabilidad única (SRP):
+## 📁 Estructura del Proyecto
 
 ```
 DevOps-Wisdom-/
 ├── .github/
-│   └── workflows/
-│       └── main.yml           → Pipeline de CI/CD automatizado en GitHub Actions
+│   ├── workflows/
+│   │   └── main.yml           → Pipeline CI/CD DevSecOps automatizado en GitHub Actions
+│   └── dependabot.yml         → Configuracion de escaneo de dependencias automatizado
+├── k8s/                       → Manifiestos de orquestacion para Kubernetes
+│   ├── deployment.yaml        → Despliegue con 2 replicas, recursos y health probes
+│   ├── service.yaml           → Exposicion del servicio mediante NodePort 30080
+│   └── hpa.yaml               → Autoscalado horizontal de pods basado en CPU (2 a 5 replicas)
 ├── src/
-│   ├── main/
-│   │   ├── java/com/example/bdget/
-│   │   │   ├── BdgetApplication.java      → Clase principal de arranque Spring Boot
-│   │   │   ├── controller/
-│   │   │   │   └── StudentController.java  → Capa de entrada REST (endpoints HTTP)
-│   │   │   ├── service/
-│   │   │   │   ├── StudentService.java     → Interfaz con contratos de lógica de negocio
-│   │   │   │   └── StudentServiceImpl.java → Implementación de lógica de negocio
-│   │   │   ├── repository/
-│   │   │   │   └── StudentRepository.java  → Capa de acceso a datos (Spring Data JPA)
-│   │   │   ├── model/
-│   │   │   │   └── Student.java            → Entidad JPA persistente
-│   │   │   └── exception/
-│   │   │       └── GlobalExceptionHandler.java → Manejo centralizado de errores REST
-│   │   └── resources/
-│   │       └── application.properties     → Configuración de entorno y base de datos
-│   └── test/
-│       ├── java/com/example/bdget/
-│       │   ├── BdgetApplicationTests.java   → Prueba de arranque de contexto
-│       │   ├── controller/
-│       │   │   └── StudentControllerTest.java → Pruebas de integración web (MockMvc)
-│       │   ├── service/
-│       │   │   └── StudentServiceImplTest.java→ Pruebas unitarias con mocks (Mockito)
-│       │   └── model/
-│       │       └── StudentModelTest.java     → Pruebas de entidad y encapsulamiento
-│       └── resources/
-│           └── application.properties       → Configuración aislada para pruebas (puerto 0)
-├── Dockerfile                 → Contenedorización multi-etapa (Temurin 17)
-├── pom.xml                    → Declaración de dependencias y plugins Maven (JaCoCo)
+│   ├── main/java/...          → Codigo fuente REST (Controller, Service, Repository, Model)
+│   └── test/java/...          → 18 pruebas unitarias (MockMvc, Mockito, SpringBootTest)
+├── docker-compose.yml         → Orquestacion local con limites de recursos y red bridge
+├── Dockerfile                 → Contenedorizacion multi-etapa segura (Non-root, Temurin 17)
+├── pom.xml                    → Dependencias Maven y configuracion de plugin JaCoCo
 ├── mvnw / mvnw.cmd            → Maven Wrapper ejecutable multiplataforma
-└── README.md                  → Documentación técnica y guía de buenas prácticas
+└── README.md                  → Documentacion tecnica integral
 ```
 
 ---
 
-## 🌳 Estrategia de Ramificación (Indicador IE1)
+## 🐳 Contenerización y Hardening de Seguridad (Indicador IE1)
 
-### 1. Comparativa de Modelos de Ramificación
+El archivo [Dockerfile](Dockerfile) implementa las mejores prácticas de la industria en ingeniería de contenedores para la nube:
 
-| Criterio | GitFlow | GitHub Flow | Trunk-Based Development |
-| :--- | :--- | :--- | :--- |
-| **Estructura de ramas** | Múltiples ramas formales: `main`, `develop`, `feature/*`, `release/*`, `hotfix/*`. | Rama principal (`main`) y ramas efímeras de funcionalidad (`feature/*`). | Una sola rama activa (`trunk` o `main`) con ramas de vida ultracorta (< 24 hrs). |
-| **Frecuencia de Despliegue** | Programada por versiones/releases formales (semanal, quincenal, mensual). | Despliegue continuo hacia producción con cada Pull Request mergeado. | Despliegue continuo y ultra frecuente (múltiples veces al día). |
-| **Manejo de Hotfixes** | Canal dedicado: rama `hotfix/*` desde `main` que se reintegra a `main` y `develop`. | Se crea una rama corta desde `main` y se mergea de inmediato vía PR. | Corrección directa en el `trunk` y push inmediato hacia producción (o con *feature flags*). |
-| **Complejidad de Merge** | Media/Alta: requiere sincronización bidireccional entre ramas de soporte. | Baja: solo se sincroniza con `main`. | Muy baja: resolución constante y temprana de conflictos. |
-| **Idoneidad en la Nube** | Excelente para entornos corporativos con auditoría y versionado estricto. | Excelente para servicios web y aplicaciones SaaS ágiles. | Excelente para equipos maduros con cobertura de pruebas > 90% y *feature toggles*. |
-
-### 2. Justificación Técnica de la Elección de GitFlow
-
-Para este proyecto y microservicio se adoptó **GitFlow** debido a las siguientes razones técnicas:
-1. **Estabilidad Absoluta en Producción (`main`):** La rama `main` refleja únicamente código probado, empaquetado y en producción, impidiendo que desarrollos incompletos lleguen al entorno operativo.
-2. **Espacio de Integración Continua (`develop`):** Permite a la pareja de trabajo consolidar y verificar de forma conjunta los módulos de búsqueda y métricas antes de generar una versión de entrega.
-3. **Aislamiento de Funcionalidades (`feature/`):** Cada cambio funcional (`feature/buscar-estudiantes` y `feature/conteo-estudiantes`) se desarrolla y prueba en una rama propia sin interrumpir el avance del otro desarrollador.
-4. **Manejo Formal de Incidentes Críticos (`hotfix/`):** Si se detecta una anomalía en producción (como ocurrió con la respuesta ante IDs inexistentes), GitFlow permite intervenir directamente desde `main` sin incorporar código inestable que esté aún en `develop`.
+1. **Construcción Multi-Etapa (*Multi-Stage Build*):**
+   * **Etapa 1 (`buildstage`):** Utiliza `eclipse-temurin:17-jdk` para compilar y empaquetar el binario JAR, descartando las herramientas de compilación pesadas al finalizar.
+   * **Etapa 2 (`producción`):** Utiliza `eclipse-temurin:17-jre`, reduciendo drásticamente la superficie de ataque y el peso final de la imagen.
+2. **Principio de Mínimo Privilegio (Non-Root User):**
+   * Se crea un usuario y grupo de sistema sin privilegios (`appuser:appgroup`), evitando que el contenedor se ejecute con privilegios de `root` en el host o en el clúster.
+3. **Parámetros JVM para Entornos Cloud:**
+   * `JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"`: Asegura que la máquina virtual de Java reconozca los límites de memoria física impuestos por Docker o Kubernetes y no exceda las cuotas del sistema (prevención de errores *OOMKilled*).
+4. **Sonda Nativa de Salud (`HEALTHCHECK`):**
+   * Monitoreo nativo del contenedor cada 30 segundos validando respuesta HTTP en `/students`.
 
 ---
 
-## 📝 Convenciones de Commits (Indicador IE5)
+## 🛡️ Seguridad, Dependabot y Security Gates (Indicador IE3)
 
-Se adoptó el estándar internacional **Conventional Commits v1.0.0**, asegurando que el historial de Git sea legible, estructurado y apto para generación automática de *changelogs*.
+La seguridad se integró como un elemento fundamental en todo el ciclo de entrega de software (*Shift-Left Security*):
 
-### Formato
-```
-<tipo>[ámbito opcional]: <descripción concisa en minúsculas y modo imperativo>
-```
+### 1. Escaneo Automatizado de Dependencias con Dependabot
+El archivo [.github/dependabot.yml](.github/dependabot.yml) supervisa y actualiza de manera continua:
+* **Ecosistema Maven (`pom.xml`):** Escaneo semanal de dependencias de Spring Boot y librerías externas.
+* **Ecosistema GitHub Actions:** Actualización de versiones de acciones en los workflows.
+* **Ecosistema Docker:** Supervisión de parches de seguridad sobre la imagen base de Temurin.
 
-### Tipos Utilizados
-* `feat:` Nueva funcionalidad o endpoint incorporado al microservicio.
-* `fix:` Corrección de un defecto o bug en el código.
-* `test:` Adición o actualización de pruebas unitarias o de integración.
-* `docs:` Cambios o adiciones a la documentación técnica.
-* `chore:` Tareas rutinarias, configuración de herramientas, dependencias o permisos.
-* `merge:` Mensaje formal de integración de ramas.
-
-### Ejemplos Reales Aplicados en el Repositorio
-* `feat: implementa busqueda de estudiantes por nombre y pruebas unitarias`
-* `feat: implementa endpoint de conteo total de estudiantes y pruebas unitarias`
-* `fix: corrige retorno http 404 al consultar estudiante inexistente`
-* `chore: corrige permisos de mvnw, optimiza pipeline ci-cd y aisla pruebas`
-* `merge: integra feature/buscar-estudiantes en develop`
+### 2. Escaneo de Vulnerabilidades y Bloqueo en Pipeline (Security Gate)
+En el pipeline de GitHub Actions se ejecuta el analizador de seguridad **Trivy (SCA & Container Security)**:
+* **Escaneo de Código y Librerías:** Analiza las dependencias Maven en busca de CVEs conocidos.
+* **Escaneo de la Imagen Docker:** Inspecciona los paquetes del sistema operativo base del contenedor.
+* **Política de Bloqueo (*Fail-on-Severity*):** Si se detecta alguna vulnerabilidad clasificada como **`CRITICAL`**, el job falla automáticamente (`exit-code: 1`), **bloqueando el pipeline e impidiendo el empaquetado o despliegue a producción**.
 
 ---
 
-## 🔀 Convenciones de Naming de Ramas (Indicador IE5)
+## ☸️ Orquestación de Contenedores y Escalabilidad (Indicador IE5)
 
-Se establecieron reglas estrictas de nomenclatura en minúsculas, usando guiones como separadores (*kebab-case*):
+Se proporcionan dos soluciones de orquestación diseñadas para alta disponibilidad y resiliencia:
 
-| Prefijo de Rama | Propósito | Rama Origen | Rama Destino de Merge | Ejemplo Real en el Repo |
-| :--- | :--- | :--- | :--- | :--- |
-| `main` | Código en producción, estable y etiquetado con versiones. | Inicial | — | `main` |
-| `develop` | Rama principal de desarrollo e integración continua. | `main` | `main` | `develop` |
-| `feature/<nombre>` | Desarrollo de una nueva funcionalidad aislada. | `develop` | `develop` | `feature/buscar-estudiantes`, `feature/conteo-estudiantes` |
-| `hotfix/<nombre>` | Reparación urgente de un fallo detectado en producción. | `main` | `main` y `develop` | `hotfix/corregir-validacion-id` |
+### 1. Orquestación con Docker Compose (`docker-compose.yml`)
+* **Límites de Recursos:**
+  * Límite estricto (*Limits*): Máximo `0.50` CPU y `512MB` de memoria RAM.
+  * Reserva mínima (*Reservations*): `0.25` CPU y `256MB` de memoria RAM.
+* **Aislamiento de Red:** Red dedicada tipo *bridge* (`bdget-network`) para aislar el microservicio.
+* **Política de Resiliencia:** `restart_policy: condition: on-failure` con hasta 3 reintentos automáticos.
 
----
-
-## 🔀 Flujos de Merge (Indicador IE5)
-
-En GitFlow se utiliza la estrategia de **Merge Commit con preservación de historia (`--no-ff` / No Fast-Forward)**.
-
-* **¿Por qué `--no-ff`?**  
-  A diferencia de un *Fast-Forward* (que aplana los commits y borra la evidencia de la rama), `--no-ff` genera un commit de unión explícito. Esto permite:
-  * Documentar exactamente cuándo comenzó y terminó el desarrollo de una característica.
-  * Mantener la trazabilidad de qué desarrollador integró el cambio y bajo qué Pull Request.
-  * Facilitar la reversión (*revert*) de una funcionalidad completa con un solo comando en caso de error.
+### 2. Orquestación Empresarial con Kubernetes (`k8s/`)
+* **`k8s/deployment.yaml`:**
+  * **2 Réplicas** activas para garantizar tolerancia a fallos.
+  * Estrategia **RollingUpdate** (`maxSurge: 1`, `maxUnavailable: 0`) para actualizaciones con cero tiempo de inactividad (*Zero Downtime Deployment*).
+  * **Sondas de Salud:** `readinessProbe` (verifica si el pod está listo para recibir tráfico) y `livenessProbe` (reinicia el pod si la aplicación deja de responder).
+  * **Contexto de Seguridad:** `runAsNonRoot: true` para cumplimiento de gobernanza y políticas de clúster.
+* **`k8s/service.yaml`:** Exposición desacoplada mediante servicio `NodePort` en el puerto `30080`.
+* **`k8s/hpa.yaml`:** Autoscalado Horizontal (*HPA*) que escala dinámicamente entre **2 y 5 réplicas** si el consumo promedio de CPU supera el 70%.
 
 ---
 
-## 🔍 Estrategia de Revisión de Pull Requests (Indicador IE5)
+## ⚙️ Pipeline CI/CD DevSecOps y Entorno Cloud Simulado (Indicador IE2, IE3 e IE4)
 
-Ningún cambio ingresa a `develop` o `main` sin pasar por un proceso estructurado de revisión de pares:
-
-### Checklist Obligatorio para Aprobación de un PR
-1. [x] **Pipeline de CI en Verde:** El workflow de GitHub Actions debe ejecutarse y terminar exitosamente (100% de tests unitarios aprobados).
-2. [x] **Revisión de Pares (Peer Review):** El PR debe contar con la aprobación del otro integrante del equipo.
-3. [x] **Ausencia de Conflictos:** La rama debe estar actualizada respecto a la rama base (`develop` o `main`).
-4. [x] **Cobertura de Código:** Las nuevas funciones deben venir acompañadas de sus correspondientes pruebas unitarias en `src/test`.
-5. [x] **Convención de Commits:** Todos los commits deben cumplir con el estándar Conventional Commits.
-
----
-
-## ⚙️ Automatización (CI/CD) y Entorno Cloud Simulado (Indicadores IE3 e IE4)
-
-El archivo de automatización [.github/workflows/main.yml](file:///c:/Users/valen/Downloads/depossi/proyecto/DevOps-Wisdom-/.github/workflows/main.yml) implementa un pipeline formal compuesto por dos fases:
+El pipeline implementado en [.github/workflows/main.yml](.github/workflows/main.yml) automatiza el ciclo de vida completo en 4 fases interdependientes:
 
 ```mermaid
-graph LR
-    subgraph Eventos Git
-        A[Push a develop] --> C[Job: test CI]
-        B[PR a main] --> C
-    end
-    subgraph Fase CI: Integración Continua
-        C --> D[Setup JDK 17 Temurin]
-        D --> E[chmod +x mvnw]
-        E --> F[mvn test]
-        F --> G[Upload JaCoCo Report]
-    end
-    subgraph Fase CD: Empaquetado y Cloud
-        G --> H{¿Es PR a main?}
-        H -- Sí --> I[Job: build CD]
-        I --> J[mvn package -DskipTests]
-        J --> K[Upload Artifact: bdget.jar]
-        K --> L[docker build: bdget:latest]
-        H -- No --> M[Fin CI]
-    end
+graph TD
+    A[Disparador: Push o PR a develop / main] --> B[Job 1: Pruebas Unitarias y Calidad]
+    B -->|18 tests OK + JaCoCo| C[Job 2: Analisis de Seguridad SCA]
+    C -->|Trivy: Sin vulnerabilidades criticas| D[Job 3: Construccion de Imagen Docker]
+    D -->|Imagen bdget:1.0.0 generada| E[Job 4: Despliegue en Cloud Simulado]
+    E --> F[Validacion de Manifiestos K8s]
+    F --> G[Arranque con Docker Compose]
+    G --> H[Smoke Test en Vivo: curl HTTP 200 OK]
+    H --> I[Registro de Trazabilidad y Detencion Limpia]
 ```
 
-### 1. Rol de la Automatización en el Proceso CI/CD
-* **Integración Continua (CI):** Ejecuta la validación automática del código en cada `push` a `develop`. Previene el *"integration hell"* al detectar regresiones o errores de compilación inmediatamente tras cada aporte colaborativo.
-* **Entrega Continua (CD):** Ante un `pull_request` hacia `main`, el pipeline no solo re-valida las pruebas sino que genera el paquete binario ejecutable (`bdget.jar`) y construye la imagen Docker (`docker build`). Esto garantiza que el software esté siempre en un estado desplegable en cualquier proveedor de nube (AWS, GCP, Azure o Kubernetes).
-* **Entorno Cloud Simulado:** Las máquinas virtuales `ubuntu-latest` provistas por GitHub Actions actúan como un entorno cloud simulado donde se ejecutan los contenedores y herramientas en un entorno idéntico a producción, independiente de los sistemas operativos locales de los desarrolladores.
+### Detalle de las Etapas del Pipeline:
+1. **Job 1 (`unit-tests` - IE2):** Ejecuta la suite de 18 pruebas unitarias con JUnit 5 y genera el reporte de cobertura de código JaCoCo como artefacto.
+2. **Job 2 (`security-scan` - IE3):** Escanea dependencias con Trivy y aplica la política de bloqueo si existen vulnerabilidades críticas.
+3. **Job 3 (`build-container` - IE1):** Construye la imagen Docker multi-etapa y analiza su seguridad.
+4. **Job 4 (`deploy-simulation` - IE4 & IE5):**
+   * Valida la sintaxis de los manifiestos de Kubernetes con `kubectl apply --dry-run=client`.
+   * Despliega la orquestación en el runner con `docker compose up -d`.
+   * Ejecuta un **Smoke Test automatizado** con `curl` validando en bucle que `/students` y `/students/count` respondan código `200 OK`.
+   * Captura y preserva los logs de ejecución para trazabilidad completa.
 
 ---
 
-## 📊 Trazabilidad del Flujo Colaborativo (Indicador IE2)
+## 🌳 Estrategia de Ramificación y Buenas Prácticas (Evaluación 1 & 2)
 
-A continuación se detalla la secuencia de simulación colaborativa desarrollada en el proyecto:
-
-| Etapa | Rama Involucrada | Comandos Git Clave | Descripción del Cambio | Resultado |
-| :--- | :--- | :--- | :--- | :--- |
-| **0. Baseline Fixes** | `main` | `git update-index --chmod=+x mvnw`, `git commit` | Corrección de permisos de ejecución en Linux, aislamiento de puerto `0` en tests y ajuste del pipeline CI/CD. | Build y pruebas en verde (13 tests OK). |
-| **1. Inicialización GitFlow** | `develop` | `git checkout -b develop` | Creación de la rama base de desarrollo e integración a partir de `main`. | Rama `develop` activa. |
-| **2. Feature 1** | `feature/buscar-estudiantes` | `git checkout -b feature/...`, `git commit` | Endpoint `GET /students/search?name={nombre}` con pruebas unitarias en servicio y controlador. | 15 tests OK. |
-| **3. Merge Feature 1** | `develop` | `git checkout develop`, `git merge --no-ff feature/...` | Integración de Feature 1 en la rama de desarrollo manteniendo la historia. | Grafo histórico preservado. |
-| **4. Feature 2** | `feature/conteo-estudiantes` | `git checkout -b feature/...`, `git commit` | Endpoint `GET /students/count` para métricas del total de estudiantes con tests. | 17 tests OK. |
-| **5. Merge Feature 2** | `develop` | `git checkout develop`, `git merge --no-ff feature/...` | Integración de Feature 2 en `develop`. | Grafo histórico preservado. |
-| **6. Release 0.1.0** | `main` | `git checkout main`, `git merge --no-ff develop` | Fusión de `develop` hacia `main` simulando la entrega a producción. | Versión productiva 0.1.0 lista. |
-| **7. Hotfix Producción** | `hotfix/corregir-validacion-id` | `git checkout -b hotfix/...`, `git commit` | Corrección de bug crítico: retorno HTTP 404 al consultar estudiantes inexistentes con su respectivo test. | 18 tests OK (100% éxito). |
-| **8. Sincronización Hotfix** | `main` y `develop` | `git merge --no-ff hotfix/...` | Fusión del hotfix en `main` y sincronización inmediata hacia `develop` para evitar regresiones. | Ciclo completo cerrado. |
-
----
-
-## 🐳 Contenedorización con Docker
-
-El proyecto incluye un [Dockerfile](Dockerfile) multi-etapa optimizado con **Eclipse Temurin 17**:
-
-```dockerfile
-# Etapa 1: Compilación
-FROM eclipse-temurin:17-jdk AS buildstage
-RUN apt-get update && apt-get install -y maven
-WORKDIR /app
-COPY pom.xml .
-COPY src /app/src
-RUN mvn clean package -DskipTests
-
-# Etapa 2: Imagen liviana de producción
-FROM eclipse-temurin:17-jre
-WORKDIR /app
-COPY --from=buildstage /app/target/bdget-0.0.1-SNAPSHOT.jar /app/bdget.jar
-EXPOSE 8080
-ENTRYPOINT [ "java", "-jar", "/app/bdget.jar" ]
-```
-
-Para construir y levantar el contenedor manualmente:
-```bash
-docker build -t bdget:latest .
-docker run -p 8080:8080 bdget:latest
-```
+* **Modelo de Ramificación:** **GitFlow** formal (`main`, `develop`, `feature/*`, `hotfix/*`).
+* **Convención de Commits:** **Conventional Commits v1.0.0** (`feat:`, `fix:`, `chore:`, `docs:`, `test:`).
+* **Estrategia de Merge:** Preservación de la historia de ramas mediante `--no-ff`.
 
 ---
 
 ## ⚖️ Declaración de Uso Ético de Inteligencia Artificial (Normativa Duoc UC)
 
-En cumplimiento de las instrucciones y la normativa institucional sobre el uso ético de Inteligencia Artificial:
+En cumplimiento de las instrucciones de la asignatura y la política institucional sobre uso de Inteligencia Artificial:
 
-1. **Herramientas Utilizadas:** Se utilizó un asistente de Inteligencia Artificial generativa como herramienta de consulta y apoyo técnico.
-2. **Aplicación Específica:**
-   * Apoyo en la redacción, formateo y diseño de tablas técnicas comparativas en el `README.md`.
-   * Verificación de la sintaxis del archivo YAML para el pipeline de GitHub Actions ([main.yml](.github/workflows/main.yml)).
-   * Asistencia en el diagnóstico del error de colisión de puertos en las pruebas unitarias locales.
+1. **Herramientas de IA Utilizadas:** Se utilizó un asistente de IA generativa como apoyo técnico.
+2. **Aplicación Específica en la Evaluación:**
+   * Asistencia en el diseño de sintaxis y diagramas Mermaid del pipeline en el `README.md`.
+   * Verificación de sintaxis de los manifiestos de Kubernetes (`deployment.yaml`, `service.yaml`, `hpa.yaml`).
+   * Consulta sobre mejores prácticas de hardening en Dockerfile y opciones de escaneo con Trivy.
 3. **Declaración de Autoría y Responsabilidad:**
-   * Todas las decisiones arquitectónicas, la selección del modelo de ramificación GitFlow, la implementación del código Java, el diseño de endpoints y la validación de pruebas unitarias fueron supervisadas, probadas y ejecutadas por el equipo de estudiantes.
-   * El equipo asume total responsabilidad de la validez y originalidad del contenido entregado.
-4. **Referencia Institucional:** Lineamientos de uso ético de IA Duoc UC disponibles en [https://bibliotecas.duoc.cl/ia](https://bibliotecas.duoc.cl/ia).
+   * Todas las decisiones arquitectónicas, configuración de límites de recursos, diseño de pruebas unitarias y validación del pipeline fueron ejecutadas, probadas y supervisadas por el equipo de estudiantes.
+   * El equipo asume total responsabilidad de la originalidad del proyecto.
+4. **Referencia Institucional:** [https://bibliotecas.duoc.cl/ia](https://bibliotecas.duoc.cl/ia).
 
 ---
 
 ## 💡 Reflexiones Individuales Obligatorias (Normativa Duoc UC)
 
-*(Cada integrante incluye a continuación su reflexión personal, redactada de forma individual y sin apoyo de IA, explicando su aprendizaje y contribución al proyecto según lo estipulado en la pauta de evaluación).*
+*(Cada integrante redacta a continuación su reflexión personal, de forma individual y sin apoyo de IA, explicando su aprendizaje y contribución al proyecto).*
 
 ### 👤 Reflexión de Valentina Ruiz
-> *(Espacio para que Valentina redacte su reflexión personal sobre los aprendizajes obtenidos en Git, ramas, flujos colaborativos y su contribución en la configuración del pipeline).*
+> *(Espacio para que Valentina redacte su reflexión personal sobre el aprendizaje en DevSecOps, la orquestación con Docker Compose/Kubernetes y el despliegue continuo).*
 
 ### 👤 Reflexión de Michelle Gauna
-> *(Espacio para que Michelle redacte su reflexión personal sobre el trabajo en equipo, la gestión de ramas con GitFlow y la automatización CI/CD con GitHub Actions).*
+> *(Espacio para que Michelle redacte su reflexión personal sobre la seguridad en pipelines, el ajuste de límites de recursos y la contenerización segura).*

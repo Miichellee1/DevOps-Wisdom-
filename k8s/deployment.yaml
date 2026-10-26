@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bdget-deployment
+  labels:
+    app: bdget
+    tier: backend
+spec:
+  # Parametro de escalabilidad inicial: 2 replicas para alta disponibilidad
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: bdget
+  template:
+    metadata:
+      labels:
+        app: bdget
+        tier: backend
+    spec:
+      # Parametro de gobernanza y seguridad: usuario no-root
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+        - name: bdget-container
+          image: bdget:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          # Ajuste de parametros de desempeno y limites de recursos (IE3 / IE5)
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          # Sonda de disponibilidad (Readiness Probe)
+          readinessProbe:
+            httpGet:
+              path: /students
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          # Sonda de supervivencia (Liveness Probe)
+          livenessProbe:
+            httpGet:
+              path: /students
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          env:
+            - name: JAVA_OPTS
+              value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
