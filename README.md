@@ -1,8 +1,12 @@
 # bdget 🎓 — Microservicio de Gestión de Estudiantes
 
-> **Evaluación Parcial N°1 & N°2: "Añadiéndole complejidad a nuestro pipeline"**  
-> **Asignatura:** Ingeniería DevOps (DOY0101) — Duoc UC  
-> **Ponderación Evaluación 1:** 25% | **Ponderación Evaluación 2:** 45%  
+[![Pipeline CI/CD DevSecOps](https://github.com/Miichellee1/DevOps-Wisdom-/actions/workflows/main.yml/badge.svg)](https://github.com/Miichellee1/DevOps-Wisdom-/actions/workflows/main.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Miichellee1_DevOps-Wisdom-&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Miichellee1_DevOps-Wisdom-)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Miichellee1_DevOps-Wisdom-&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Miichellee1_DevOps-Wisdom-)
+
+> **Evaluación Parcial N°2: "Añadiéndole complejidad a nuestro pipeline"**
+> **Asignatura:** Ingeniería DevOps (DOY0101) — Duoc UC
+> **Ponderación Evaluación 1:** 25% | **Ponderación Evaluación 2:** 45%
 
 ---
 
@@ -12,52 +16,83 @@
 * **Carrera:** Ingeniería en Informática / Conectividad y Redes
 * **Integrantes:**
   * **Valentina Ruiz** — `va.ruizi@duocuc.cl`
-  * **Michelle Gauna** — `ma.gauna@duocuc.cl` (`Miichellee1`)
+  * **Michelle Serrano** — `@duocuc.cl`
 * **Repositorio GitHub:** [https://github.com/Miichellee1/DevOps-Wisdom-](https://github.com/Miichellee1/DevOps-Wisdom-)
 
 ---
 
 ## 📖 Descripción General del Proyecto
 
-`bdget` es un microservicio REST desarrollado en **Java 17 + Spring Boot 3** para la gestión integral de estudiantes (CRUD, búsqueda por nombre y métricas estadísticas). El proyecto incorpora un ciclo de vida de desarrollo DevOps y DevSecOps completamente automatizado mediante **GitHub Actions**, incluyendo:
+`bdget` es un microservicio REST desarrollado en **Java 17 + Spring Boot 3.5** para la gestión de estudiantes (CRUD, búsqueda por nombre y conteo). Su ciclo de vida completo está automatizado con un pipeline **CI/CD DevSecOps en GitHub Actions** que:
 
-1. **Suite de Pruebas Automatizadas:** 18 tests unitarios con JUnit 5 y Mockito, con análisis de cobertura de código vía **JaCoCo**.
-2. **Seguridad y Análisis de Vulnerabilidades (DevSecOps):** Escaneo continuo de dependencias con **Dependabot**, escaneo de seguridad estático y de contenedores con **Trivy / Snyk**, y políticas de bloqueo (*Security Gates*).
-3. **Contenerización y Hardening:** `Dockerfile` multi-etapa optimizado con imagen liviana Eclipse Temurin 17 JRE y ejecución con usuario sin privilegios de root.
-4. **Orquestación y Escalabilidad:** Arquitectura orquestada mediante **Docker Compose** y manifiestos de **Kubernetes** (`k8s/`) con definición de límites de recursos, sondas de salud (*liveness/readiness probes*) y escalamiento horizontal (*HPA*).
-5. **Despliegue Automatizado y Smoke Testing:** Despliegue en un entorno cloud simulado (runners de GitHub Actions) con validación automática en vivo (*Health Checks*).
+1. Ejecuta **26 pruebas automatizadas** (unitarias, de controlador y de integración con base de datos) y **bloquea** si la cobertura baja del 80%.
+2. Analiza la calidad y seguridad del código con **SonarCloud** y **bloquea** si el *Quality Gate* falla.
+3. Escanea dependencias, secretos e infraestructura como código con **Trivy** y **bloquea** ante vulnerabilidades `CRITICAL`/`HIGH` con parche disponible. **Dependabot** mantiene las dependencias actualizadas.
+4. Construye una **imagen Docker multi-etapa endurecida**, la escanea, genera su **SBOM** y la publica en **GitHub Container Registry** etiquetada con el SHA del commit.
+5. **Despliega automáticamente** esa misma imagen en dos entornos simulados: **Docker Compose** (gateway nginx + réplicas + PostgreSQL) y un clúster **Kubernetes (kind)**, validando cada despliegue con un *smoke test* funcional.
+
+---
+
+## 🏗️ Arquitectura
+
+```mermaid
+graph LR
+    U[Cliente HTTP] -->|:8080| G[gateway<br/>nginx unprivileged]
+    subgraph backend [Red interna backend]
+        G --> A1[bdget-service<br/>réplica 1]
+        G --> A2[bdget-service<br/>réplica 2]
+        G -.-> A3[bdget-service<br/>réplica N]
+        A1 --> DB[(PostgreSQL 16)]
+        A2 --> DB
+        A3 -.-> DB
+    end
+```
+
+| Componente | Imagen | Rol |
+|---|---|---|
+| `gateway` | `nginxinc/nginx-unprivileged:1.27-alpine` | Reverse proxy y balanceo de carga entre réplicas, sin root |
+| `bdget-service` | `ghcr.io/miichellee1/devops-wisdom:sha-<commit>` | Microservicio Spring Boot (escalable horizontalmente) |
+| `db` | `postgres:16-alpine` | Persistencia; solo accesible desde la red interna |
+
+Perfiles de Spring Boot:
+* **default:** H2 en memoria (desarrollo y pruebas, sin infraestructura externa).
+* **dev:** igual que default, con la consola H2 habilitada.
+* **prod:** PostgreSQL con credenciales inyectadas por variables de entorno (Docker Compose y Kubernetes).
 
 ---
 
 ## 🚀 Cómo Levantar el Proyecto Localmente
 
-### Opción 1: Ejecución con Maven Wrapper (Nativo)
+### Opción 1: Maven Wrapper (H2 en memoria)
 ```bash
-# Ejecutar la aplicacion
-./mvnw spring-boot:run          # Linux / macOS
-.\mvnw.cmd spring-boot:run      # Windows
+./mvnw spring-boot:run                                   # Linux / macOS
+.\mvnw.cmd spring-boot:run                               # Windows
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev    # con consola H2 en /h2-console
 
-# Ejecutar las 18 pruebas unitarias y generar reporte JaCoCo
-./mvnw clean test               # Linux / macOS
-.\mvnw.cmd clean test           # Windows
+./mvnw verify    # pruebas + reporte JaCoCo + validación de cobertura mínima
 ```
-* **API REST:** `http://localhost:8080/students`
-* **Consola H2 (en memoria):** `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:mem:bdgetdb`, usuario: `sa`, sin contraseña).
 
-### Opción 2: Ejecución Orquestada con Docker Compose
+### Opción 2: Entorno completo con Docker Compose
 ```bash
-# Construir la imagen y levantar el servicio en segundo plano
-docker compose up -d --build
-
-# Verificar el estado y salud del contenedor
-docker compose ps
-
-# Ver logs en tiempo real
-docker compose logs -f
-
-# Detener los servicios
-docker compose down
+cp .env.example .env               # opcional: personalizar clave, réplicas o imagen
+docker compose up -d --build --wait
+bash scripts/smoke-test.sh          # verificación funcional de la API
+docker compose up -d --scale bdget-service=3 --wait   # escalar horizontalmente
+docker compose down -v
 ```
+
+Endpoints principales (a través del gateway en `http://localhost:8080`):
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/students` | Lista estudiantes |
+| GET | `/students/{id}` | Obtiene un estudiante (404 si no existe) |
+| GET | `/students/search?name=` | Busca por nombre |
+| GET | `/students/count` | Cuenta estudiantes |
+| POST | `/students` | Crea (400 si el nombre no es válido) |
+| PUT | `/students/{id}` | Actualiza (404 si no existe) |
+| DELETE | `/students/{id}` | Elimina (204, o 404 si no existe) |
+| GET | `/actuator/health` · `/actuator/info` | Salud del servicio y versión/commit desplegado |
 
 ---
 
@@ -66,130 +101,198 @@ docker compose down
 ```
 DevOps-Wisdom-/
 ├── .github/
-│   ├── workflows/
-│   │   └── main.yml           → Pipeline CI/CD DevSecOps automatizado en GitHub Actions
-│   └── dependabot.yml         → Configuracion de escaneo de dependencias automatizado
-├── k8s/                       → Manifiestos de orquestacion para Kubernetes
-│   ├── deployment.yaml        → Despliegue con 2 replicas, recursos y health probes
-│   ├── service.yaml           → Exposicion del servicio mediante NodePort 30080
-│   └── hpa.yaml               → Autoscalado horizontal de pods basado en CPU (2 a 5 replicas)
-├── src/
-│   ├── main/java/...          → Codigo fuente REST (Controller, Service, Repository, Model)
-│   └── test/java/...          → 18 pruebas unitarias (MockMvc, Mockito, SpringBootTest)
-├── docker-compose.yml         → Orquestacion local con limites de recursos y red bridge
-├── Dockerfile                 → Contenedorizacion multi-etapa segura (Non-root, Temurin 17)
-├── pom.xml                    → Dependencias Maven y configuracion de plugin JaCoCo
-├── mvnw / mvnw.cmd            → Maven Wrapper ejecutable multiplataforma
-└── README.md                  → Documentacion tecnica integral
+│   ├── workflows/main.yml   → Pipeline CI/CD DevSecOps (7 etapas)
+│   └── dependabot.yml       → Actualización automática de Maven, Actions y Docker
+├── k8s/                     → Manifiestos Kubernetes (se aplican en orden numérico)
+│   ├── 00-namespace.yaml    → Namespace con Pod Security "restricted" + ResourceQuota
+│   ├── 01-configmap.yaml    → Configuración no sensible
+│   ├── 02-database.yaml     → PostgreSQL (StatefulSet + volumen persistente + Service interno)
+│   ├── 03-deployment.yaml   → Microservicio: 2 réplicas, probes, límites y hardening
+│   ├── 04-service.yaml      → Exposición NodePort 30080
+│   ├── 05-hpa.yaml          → Autoescalado 2–5 réplicas por CPU y memoria
+│   └── 06-pdb.yaml          → PodDisruptionBudget (mínimo 1 réplica disponible)
+├── nginx/nginx.conf         → Gateway / balanceador de carga
+├── scripts/smoke-test.sh    → Smoke test funcional usado por el pipeline
+├── src/main/...             → Código fuente (Controller, Service, Repository, Model)
+├── src/test/...             → 26 pruebas automatizadas
+├── docker-compose.yml       → Orquestación del entorno cloud simulado
+├── Dockerfile               → Imagen multi-etapa endurecida
+├── .trivyignore             → Excepciones de seguridad justificadas y con vencimiento
+├── .env.example             → Variables de entorno de ejemplo (sin secretos reales)
+└── pom.xml                  → Dependencias, JaCoCo (cobertura mínima) y SonarCloud
 ```
 
 ---
 
-## 🐳 Contenerización y Hardening de Seguridad (Indicador IE1)
+## 🐳 Contenerización (IE1)
 
-El archivo [Dockerfile](Dockerfile) implementa las mejores prácticas de la industria en ingeniería de contenedores para la nube:
+El [Dockerfile](Dockerfile) aplica buenas prácticas para entornos cloud:
 
-1. **Construcción Multi-Etapa (*Multi-Stage Build*):**
-   * **Etapa 1 (`buildstage`):** Utiliza `eclipse-temurin:17-jdk` para compilar y empaquetar el binario JAR, descartando las herramientas de compilación pesadas al finalizar.
-   * **Etapa 2 (`producción`):** Utiliza `eclipse-temurin:17-jre`, reduciendo drásticamente la superficie de ataque y el peso final de la imagen.
-2. **Principio de Mínimo Privilegio (Non-Root User):**
-   * Se crea un usuario y grupo de sistema sin privilegios (`appuser:appgroup`), evitando que el contenedor se ejecute con privilegios de `root` en el host o en el clúster.
-3. **Parámetros JVM para Entornos Cloud:**
-   * `JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"`: Asegura que la máquina virtual de Java reconozca los límites de memoria física impuestos por Docker o Kubernetes y no exceda las cuotas del sistema (prevención de errores *OOMKilled*).
-4. **Sonda Nativa de Salud (`HEALTHCHECK`):**
-   * Monitoreo nativo del contenedor cada 30 segundos validando respuesta HTTP en `/students`.
-
----
-
-## 🛡️ Seguridad, Dependabot y Security Gates (Indicador IE3)
-
-La seguridad se integró como un elemento fundamental en todo el ciclo de entrega de software (*Shift-Left Security*):
-
-### 1. Escaneo Automatizado de Dependencias con Dependabot
-El archivo [.github/dependabot.yml](.github/dependabot.yml) supervisa y actualiza de manera continua:
-* **Ecosistema Maven (`pom.xml`):** Escaneo semanal de dependencias de Spring Boot y librerías externas.
-* **Ecosistema GitHub Actions:** Actualización de versiones de acciones en los workflows.
-* **Ecosistema Docker:** Supervisión de parches de seguridad sobre la imagen base de Temurin.
-
-### 2. Escaneo de Vulnerabilidades y Bloqueo en Pipeline (Security Gate)
-En el pipeline de GitHub Actions se ejecuta el analizador de seguridad **Trivy (SCA & Container Security)**:
-* **Escaneo de Código y Librerías:** Analiza las dependencias Maven en busca de CVEs conocidos.
-* **Escaneo de la Imagen Docker:** Inspecciona los paquetes del sistema operativo base del contenedor.
-* **Política de Bloqueo (*Fail-on-Severity*):** Si se detecta alguna vulnerabilidad clasificada como **`CRITICAL`**, el job falla automáticamente (`exit-code: 1`), **bloqueando el pipeline e impidiendo el empaquetado o despliegue a producción**.
+| Práctica | Implementación |
+|---|---|
+| Build multi-etapa | `maven:3.9-eclipse-temurin-17` compila; la imagen final solo contiene la JRE y el JAR |
+| Imagen base optimizada | `eclipse-temurin:17-jre-alpine` (liviana, menor superficie de ataque) |
+| Caché de capas | `pom.xml` y `dependency:go-offline` se copian antes que `src/`: un cambio de código no vuelve a descargar dependencias |
+| Parches del SO | `apk upgrade` en cada build |
+| Mínimo privilegio | Usuario `appuser` con UID/GID fijo 1001 (coincide con `runAsUser` en Kubernetes) |
+| JVM consciente del contenedor | `-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError` |
+| Apagado ordenado | `ENTRYPOINT` en forma *exec* (Java es PID 1 y recibe `SIGTERM`) + `server.shutdown=graceful` |
+| Salud | `HEALTHCHECK` contra `/actuator/health/readiness` |
+| Trazabilidad | Labels OCI `org.opencontainers.image.revision` y `version` con el commit; `/actuator/info` expone el commit desplegado |
+| Contexto mínimo | `.dockerignore` excluye `target/`, `.git/`, documentación y manifiestos |
 
 ---
 
-## ☸️ Orquestación de Contenedores y Escalabilidad (Indicador IE5)
+## ✅ Pruebas Automatizadas y Política de Calidad (IE2)
 
-Se proporcionan dos soluciones de orquestación diseñadas para alta disponibilidad y resiliencia:
+| Tipo | Clase | Qué valida |
+|---|---|---|
+| Unitarias de servicio | `StudentServiceImplTest` (8) | Lógica de negocio con Mockito |
+| Controlador / API | `StudentControllerTest` (14) | Códigos HTTP, validaciones (400), recursos inexistentes (404), manejo global de errores |
+| Integración de persistencia | `StudentRepositoryTest` (2) | Consultas JPA reales sobre H2 |
+| Modelo | `StudentModelTest` (1) | Entidad `Student` |
+| Contexto | `BdgetApplicationTests` (1) | Arranque completo de Spring Boot |
 
-### 1. Orquestación con Docker Compose (`docker-compose.yml`)
-* **Límites de Recursos:**
-  * Límite estricto (*Limits*): Máximo `0.50` CPU y `512MB` de memoria RAM.
-  * Reserva mínima (*Reservations*): `0.25` CPU y `256MB` de memoria RAM.
-* **Aislamiento de Red:** Red dedicada tipo *bridge* (`bdget-network`) para aislar el microservicio.
-* **Política de Resiliencia:** `restart_policy: condition: on-failure` con hasta 3 reintentos automáticos.
+**Políticas de calidad aplicadas en el pipeline (todas bloquean el avance):**
+1. **Todas las pruebas deben pasar** (`./mvnw verify`).
+2. **Cobertura de líneas ≥ 80%** (`jacoco:check`). Cobertura actual: **100%**.
+3. **Quality Gate de SonarCloud aprobado** (bugs, vulnerabilidades, code smells, duplicación y cobertura del código nuevo).
+4. **Smoke test funcional** sobre cada entorno desplegado.
 
-### 2. Orquestación Empresarial con Kubernetes (`k8s/`)
-* **`k8s/deployment.yaml`:**
-  * **2 Réplicas** activas para garantizar tolerancia a fallos.
-  * Estrategia **RollingUpdate** (`maxSurge: 1`, `maxUnavailable: 0`) para actualizaciones con cero tiempo de inactividad (*Zero Downtime Deployment*).
-  * **Sondas de Salud:** `readinessProbe` (verifica si el pod está listo para recibir tráfico) y `livenessProbe` (reinicia el pod si la aplicación deja de responder).
-  * **Contexto de Seguridad:** `runAsNonRoot: true` para cumplimiento de gobernanza y políticas de clúster.
-* **`k8s/service.yaml`:** Exposición desacoplada mediante servicio `NodePort` en el puerto `30080`.
-* **`k8s/hpa.yaml`:** Autoscalado Horizontal (*HPA*) que escala dinámicamente entre **2 y 5 réplicas** si el consumo promedio de CPU supera el 70%.
+Los reportes de JaCoCo y Surefire se publican como artefactos de cada ejecución y el resumen aparece en la pestaña *Summary* del workflow.
 
 ---
 
-## ⚙️ Pipeline CI/CD DevSecOps y Entorno Cloud Simulado (Indicador IE2, IE3 e IE4)
+## 🛡️ Seguridad y Gobernanza (IE3)
 
-El pipeline implementado en [.github/workflows/main.yml](.github/workflows/main.yml) automatiza el ciclo de vida completo en 4 fases interdependientes:
+### Análisis de código con SonarCloud
+El job `sonarcloud` ejecuta el análisis estático con `sonar-maven-plugin` usando el reporte de cobertura de JaCoCo y espera el resultado del Quality Gate (`sonar.qualitygate.wait=true`): **si el Quality Gate falla, el pipeline se bloquea y no se despliega**.
+
+### Dependabot
+[.github/dependabot.yml](.github/dependabot.yml) revisa semanalmente Maven, GitHub Actions, la imagen base del Dockerfile y las imágenes de Docker Compose. Siguiendo GitFlow, los PR apuntan a `develop`, agrupa actualizaciones menores y omite saltos de versión mayor que requieren migración planificada (Spring Boot 4, Java 25).
+
+### Trivy: escaneo y Security Gates
+| Escaneo | Qué analiza | Política |
+|---|---|---|
+| Dependencias y secretos (`fs`) | Librerías Maven con CVEs conocidos y credenciales en el código | **Bloquea** con `CRITICAL`/`HIGH` que tengan parche |
+| Infraestructura como código (`config`) | Dockerfile, Compose y manifiestos Kubernetes | Reporta alertas |
+| Imagen Docker | Paquetes del SO Alpine, JRE y JAR | **Bloquea** con `CRITICAL`/`HIGH` que tengan parche |
+
+Los resultados se publican en formato SARIF en **GitHub → Security → Code scanning** (alertas visibles para el equipo). Además se genera un **SBOM CycloneDX** de la imagen como artefacto.
+
+Gracias a estos escaneos se detectaron y corrigieron vulnerabilidades reales: se actualizó Spring Boot 3.3.7 → 3.5.16 y se forzaron versiones parcheadas de Tomcat, Jackson, httpcore5, BouncyCastle y el driver de PostgreSQL. Las únicas excepciones están en [.trivyignore](.trivyignore): dos CVEs de `spring-webmvc` cuyo parche solo existe en Spring Framework 7 y que afectan funcionalidades que este servicio no usa (`XsltView` y SSE). Cada una está justificada y **vence el 31-01-2027**, fecha en que el pipeline vuelve a bloquear si no se ha migrado.
+
+### Hardening aplicado
+* **Pipeline:** permisos mínimos (`permissions: contents: read` y permisos extra solo por job), acción de Trivy fijada por SHA (protección de la cadena de suministro), `concurrency` para evitar despliegues simultáneos.
+* **Docker Compose:** `read_only`, `cap_drop: ALL`, `no-new-privileges`, red `backend` interna (la base de datos no se expone), límites de CPU/memoria en todos los servicios.
+* **Kubernetes:** Pod Security Standard `restricted`, `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault`, sin token de ServiceAccount, `ResourceQuota` en el namespace, secretos generados en el despliegue (nunca versionados).
+* **Aplicación:** consola H2 deshabilitada fuera de desarrollo, logs en nivel INFO/WARN, los errores 500 no exponen detalles internos, validación de entrada con Bean Validation.
+
+### Parámetros de escalabilidad
+| Parámetro | Docker Compose | Kubernetes |
+|---|---|---|
+| Réplicas | `APP_REPLICAS` (2 por defecto) + `--scale` | 2 iniciales; HPA de 2 a 5 |
+| Autoescalado | — | CPU > 70% o memoria > 80%, con ventanas de estabilización |
+| Límites por réplica | 0.5 CPU / 512 MB | requests 200m / 256Mi, limits 500m / 512Mi |
+| Disponibilidad | `restart: on-failure:3`, healthchecks | Rolling update sin caída (`maxUnavailable: 0`), PDB, probes de arranque/readiness/liveness |
+| Balanceo | nginx resuelve dinámicamente las réplicas | Service de Kubernetes |
+
+---
+
+## ⚙️ Pipeline CI/CD y Trazabilidad (IE4)
 
 ```mermaid
 graph TD
-    A[Disparador: Push o PR a develop / main] --> B[Job 1: Pruebas Unitarias y Calidad]
-    B -->|18 tests OK + JaCoCo| C[Job 2: Analisis de Seguridad SCA]
-    C -->|Trivy: Sin vulnerabilidades criticas| D[Job 3: Construccion de Imagen Docker]
-    D -->|Imagen bdget:1.0.0 generada| E[Job 4: Despliegue en Cloud Simulado]
-    E --> F[Validacion de Manifiestos K8s]
-    F --> G[Arranque con Docker Compose]
-    G --> H[Smoke Test en Vivo: curl HTTP 200 OK]
-    H --> I[Registro de Trazabilidad y Detencion Limpia]
+    T[Push / PR a develop o main] --> B[1. Pruebas + cobertura >= 80%]
+    B --> S[2. SonarCloud Quality Gate]
+    B --> V[3. Trivy: dependencias, secretos, IaC]
+    V --> I[4. Imagen Docker: build, escaneo, SBOM, push a GHCR]
+    I --> C[5. Despliegue Docker Compose + smoke test + escalado]
+    S --> C
+    I --> K[6. Despliegue Kubernetes kind + rolling update + smoke test]
+    S --> K
+    C --> R[7. Reporte de trazabilidad]
+    K --> R
 ```
 
-### Detalle de las Etapas del Pipeline:
-1. **Job 1 (`unit-tests` - IE2):** Ejecuta la suite de 18 pruebas unitarias con JUnit 5 y genera el reporte de cobertura de código JaCoCo como artefacto.
-2. **Job 2 (`security-scan` - IE3):** Escanea dependencias con Trivy y aplica la política de bloqueo si existen vulnerabilidades críticas.
-3. **Job 3 (`build-container` - IE1):** Construye la imagen Docker multi-etapa y analiza su seguridad.
-4. **Job 4 (`deploy-simulation` - IE4 & IE5):**
-   * Valida la sintaxis de los manifiestos de Kubernetes con `kubectl apply --dry-run=client`.
-   * Despliega la orquestación en el runner con `docker compose up -d`.
-   * Ejecuta un **Smoke Test automatizado** con `curl` validando en bucle que `/students` y `/students/count` respondan código `200 OK`.
-   * Captura y preserva los logs de ejecución para trazabilidad completa.
+| # | Job | Indicador | Bloquea si... |
+|---|---|---|---|
+| 1 | `build-test` | IE2 | falla una prueba o la cobertura es < 80% |
+| 2 | `sonarcloud` | IE2 / IE3 | el Quality Gate falla |
+| 3 | `security-scan` | IE3 | hay CVEs `CRITICAL`/`HIGH` corregibles o secretos expuestos |
+| 4 | `build-image` | IE1 / IE3 | la imagen tiene CVEs `CRITICAL`/`HIGH` corregibles |
+| 5 | `deploy-compose` | IE4 / IE5 | el entorno no queda sano o el smoke test falla |
+| 6 | `deploy-kubernetes` | IE4 / IE5 | los manifiestos son inválidos, el rollout no termina o el smoke test falla |
+| 7 | `traceability` | IE4 | — (resume el resultado de todas las etapas) |
+
+**Entornos:** los despliegues desde `main` se registran en el entorno `production` y los de `develop` y PRs en `staging` (pestaña *Environments* del repositorio).
+
+### ¿Cómo se garantiza la trazabilidad?
+Cada cambio puede seguirse desde el commit hasta el contenedor en ejecución:
+
+1. **Commit → ejecución:** cada push o PR dispara una ejecución del workflow asociada al SHA del commit, con autor, rama y evento.
+2. **Ejecución → imagen:** la imagen se etiqueta `sha-<commit>` y lleva el label OCI `org.opencontainers.image.revision=<commit>`. En `develop`/`main` se publica en GHCR y su *digest* queda en el resumen.
+3. **Imagen → despliegue:** los jobs de despliegue usan **exactamente la imagen construida y escaneada** (se transfiere como artefacto, no se reconstruye). En Kubernetes, cada rollout se anota con `kubernetes.io/change-cause` (commit y número de ejecución) y queda en `kubectl rollout history`.
+4. **Despliegue → ejecución en vivo:** `/actuator/info` responde con el commit desplegado y el pipeline verifica que coincida con el commit que lo disparó.
+5. **Evidencia:** reportes de pruebas, cobertura, SBOM y alertas de seguridad quedan como artefactos y en la pestaña Security, y el job `traceability` publica una tabla resumen por ejecución.
 
 ---
 
-## 🌳 Estrategia de Ramificación y Buenas Prácticas (Evaluación 1 & 2)
+## 🔧 Configuración Requerida en GitHub (una sola vez)
 
-* **Modelo de Ramificación:** **GitFlow** formal (`main`, `develop`, `feature/*`, `hotfix/*`).
-* **Convención de Commits:** **Conventional Commits v1.0.0** (`feat:`, `fix:`, `chore:`, `docs:`, `test:`).
-* **Estrategia de Merge:** Preservación de la historia de ramas mediante `--no-ff`.
+La debe realizar la dueña del repositorio (**Miichellee1**):
+
+1. **SonarCloud:**
+   1. Entrar a [sonarcloud.io](https://sonarcloud.io) con GitHub → *Analyze new project* → importar la organización `miichellee1` y el repositorio `DevOps-Wisdom-`.
+   2. Verificar que la *Organization Key* sea `miichellee1` y la *Project Key* `Miichellee1_DevOps-Wisdom-` (si son distintas, actualizar `sonar.organization` y `sonar.projectKey` en `pom.xml`).
+   3. En el proyecto: *Administration → Analysis Method* → **desactivar "Automatic Analysis"** (el análisis lo hace el pipeline).
+   4. *My Account → Security* → generar un token.
+   5. En GitHub: *Settings → Secrets and variables → Actions → New repository secret* → nombre **`SONAR_TOKEN`**.
+2. **Protección de ramas (recomendado):** *Settings → Branches* → regla para `main` y `develop` que exija PR y que los checks del pipeline pasen antes de hacer merge.
+
+---
+
+## ☸️ Orquestación de Contenedores (IE5)
+
+### Docker Compose
+* Tres servicios con dependencias ordenadas por salud (`depends_on: condition: service_healthy`): `db` → `bdget-service` → `gateway`.
+* El microservicio escala horizontalmente (`deploy.replicas` / `--scale`) y nginx reparte la carga resolviendo las réplicas a través del DNS interno de Docker.
+* Redes separadas: `frontend` (expuesta) y `backend` (interna).
+* Volumen persistente `db-data` para PostgreSQL.
+
+### Kubernetes
+Despliegue manual en cualquier clúster (por ejemplo kind o minikube):
+```bash
+kubectl apply -f k8s/00-namespace.yaml
+kubectl -n bdget create secret generic bdget-db-secret --from-literal=DB_PASSWORD='<clave-segura>'
+kubectl apply -f k8s/
+kubectl -n bdget rollout status deployment/bdget-deployment
+kubectl -n bdget get all,hpa,pdb
+```
+> El HPA necesita `metrics-server` instalado en el clúster para leer el uso de CPU y memoria.
+
+---
+
+## 🌳 Estrategia de Ramificación y Buenas Prácticas
+
+* **Modelo de ramificación:** **GitFlow** (`main`, `develop`, `feature/*`, `hotfix/*`, `release`).
+* **Convención de commits:** **Conventional Commits v1.0.0** (`feat:`, `fix:`, `chore:`, `ci:`, `docs:`, `test:`).
+* **Estrategia de merge:** se preserva la historia de ramas mediante `--no-ff` / Pull Requests.
+* **Dependabot** integra sus PR en `develop`, igual que cualquier otra funcionalidad.
 
 ---
 
 ## ⚖️ Declaración de Uso Ético de Inteligencia Artificial (Normativa Duoc UC)
 
-En cumplimiento de las instrucciones de la asignatura y la política institucional sobre uso de Inteligencia Artificial:
-
-1. **Herramientas de IA Utilizadas:** Se utilizó un asistente de IA generativa como apoyo técnico.
-2. **Aplicación Específica en la Evaluación:**
-   * Asistencia en el diseño de sintaxis y diagramas Mermaid del pipeline en el `README.md`.
-   * Verificación de sintaxis de los manifiestos de Kubernetes (`deployment.yaml`, `service.yaml`, `hpa.yaml`).
-   * Consulta sobre mejores prácticas de hardening en Dockerfile y opciones de escaneo con Trivy.
-3. **Declaración de Autoría y Responsabilidad:**
-   * Todas las decisiones arquitectónicas, configuración de límites de recursos, diseño de pruebas unitarias y validación del pipeline fueron ejecutadas, probadas y supervisadas por el equipo de estudiantes.
-   * El equipo asume total responsabilidad de la originalidad del proyecto.
-4. **Referencia Institucional:** [https://bibliotecas.duoc.cl/ia](https://bibliotecas.duoc.cl/ia).
+1. **Herramientas de IA utilizadas:** Claude (Anthropic), a través de Claude Code.
+2. **Aplicación específica en la evaluación:**
+   * Revisión del repositorio contra la pauta de evaluación para identificar brechas.
+   * Apoyo en la sintaxis del workflow de GitHub Actions, los manifiestos de Kubernetes, `docker-compose.yml` y la configuración de nginx.
+   * Diagnóstico de la falla del escaneo Trivy (límite de peticiones a Maven Central) y de las dependencias vulnerables.
+   * Apoyo en la redacción de pruebas automatizadas adicionales y de esta documentación.
+3. **Validación:** el equipo revisó, ejecutó y validó todo el contenido generado (pruebas locales, despliegue con Docker Compose y ejecución del pipeline).
+4. **Declaración de autoría:** las conclusiones y reflexiones individuales fueron redactadas por cada integrante sin apoyo de IA.
+5. **Referencia institucional:** [https://bibliotecas.duoc.cl/ia](https://bibliotecas.duoc.cl/ia).
 
 ---
 
@@ -198,7 +301,7 @@ En cumplimiento de las instrucciones de la asignatura y la política institucion
 *(Cada integrante redacta a continuación su reflexión personal, de forma individual y sin apoyo de IA, explicando su aprendizaje y contribución al proyecto).*
 
 ### 👤 Reflexión de Valentina Ruiz
-> *(Espacio para que Valentina redacte su reflexión personal sobre el aprendizaje en DevSecOps, la orquestación con Docker Compose/Kubernetes y el despliegue continuo).*
+> *(Espacio para que Valentina redacte su reflexión personal).*
 
-### 👤 Reflexión de Michelle Gauna
-> *(Espacio para que Michelle redacte su reflexión personal sobre la seguridad en pipelines, el ajuste de límites de recursos y la contenerización segura).*
+### 👤 Reflexión de Michelle Serrano
+> *(Espacio para que Michelle redacte su reflexión personal).*
