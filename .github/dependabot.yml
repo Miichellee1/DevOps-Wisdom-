@@ -1,4 +1,5 @@
 version: 2
+# Se usan las etiquetas por defecto de Dependabot ("dependencies", "java", "docker", ...)
 updates:
   # Escaneo y actualizacion automatica de dependencias Maven (Java)
   - package-ecosystem: "maven"
@@ -8,10 +9,6 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
-    labels:
-      - "dependencies"
-      - "security"
-      - "maven"
     commit-message:
       prefix: "chore(deps)"
     # Parches y versiones menores en un solo PR para reducir ruido
@@ -34,9 +31,6 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
-    labels:
-      - "ci/cd"
-      - "security"
     commit-message:
       prefix: "ci(deps)"
     groups:
@@ -50,17 +44,14 @@ updates:
     target-branch: "develop"
     schedule:
       interval: "weekly"
-    labels:
-      - "docker"
-      - "security"
     commit-message:
       prefix: "chore(docker)"
     ignore:
       # El microservicio se compila para Java 17: no se migra la imagen base a otra version mayor de Java
       - dependency-name: "eclipse-temurin"
         update-types: ["version-update:semver-major"]
+      # La imagen de build maven:3.9-eclipse-temurin-17 fija el JDK 17: se actualiza manualmente
       - dependency-name: "maven"
-        versions: [">= 4"]
 
   # Imagenes usadas en docker-compose.yml (PostgreSQL y nginx)
   - package-ecosystem: "docker-compose"
@@ -68,8 +59,5 @@ updates:
     target-branch: "develop"
     schedule:
       interval: "weekly"
-    labels:
-      - "docker"
-      - "security"
     commit-message:
       prefix: "chore(docker)"
