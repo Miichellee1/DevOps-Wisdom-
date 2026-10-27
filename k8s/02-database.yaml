@@ -39,8 +39,8 @@ spec:
                   key: DB_NAME
             - name: POSTGRES_USER
               valueFrom:
-                configMapKeyRef:
-                  name: bdget-config
+                secretKeyRef:
+                  name: bdget-db-secret
                   key: DB_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
@@ -51,6 +51,7 @@ spec:
               value: /var/lib/postgresql/data/pgdata
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           resources:
@@ -75,8 +76,13 @@ spec:
               mountPath: /var/lib/postgresql/data
             - name: run
               mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
       volumes:
+        # Directorios escribibles minimos (el resto del sistema de archivos es de solo lectura)
         - name: run
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
   volumeClaimTemplates:
     - metadata:

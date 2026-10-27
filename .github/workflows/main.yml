@@ -415,6 +415,7 @@ jobs:
           kubectl apply -f k8s/00-namespace.yaml
           # Secreto generado en cada despliegue: la clave nunca se versiona en el repositorio
           kubectl -n bdget create secret generic bdget-db-secret \
+            --from-literal=DB_USER=bdget \
             --from-literal=DB_PASSWORD="$(openssl rand -base64 24)" \
             --dry-run=client -o yaml | kubectl apply -f -
           # Se despliega exactamente la imagen construida y escaneada en este pipeline

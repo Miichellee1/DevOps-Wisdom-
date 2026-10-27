@@ -21,6 +21,8 @@
 		<tomcat.version>10.1.61</tomcat.version>
 		<jackson-bom.version>2.21.8</jackson-bom.version>
 		<httpcore5.version>5.4.4</httpcore5.version>
+		<httpclient5.version>5.6.3</httpclient5.version>
+		<log4j2.version>2.25.5</log4j2.version>
 		<bouncycastle.version>1.85.2</bouncycastle.version>
 		<jacoco.minimum.coverage>0.80</jacoco.minimum.coverage>
 		<!-- Analisis estatico en SonarCloud (IE3) -->

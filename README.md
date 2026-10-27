@@ -134,7 +134,7 @@ El [Dockerfile](Dockerfile) aplica buenas prácticas para entornos cloud:
 | Imagen base optimizada | `eclipse-temurin:17-jre-alpine` (liviana, menor superficie de ataque) |
 | Caché de capas | `pom.xml` y `dependency:go-offline` se copian antes que `src/`: un cambio de código no vuelve a descargar dependencias |
 | Parches del SO | `apk upgrade` en cada build |
-| Mínimo privilegio | Usuario `appuser` con UID/GID fijo 1001 (coincide con `runAsUser` en Kubernetes) |
+| Mínimo privilegio | Usuario `appuser` con UID/GID fijo 10001 (fuera del rango de usuarios del sistema) (coincide con `runAsUser` en Kubernetes) |
 | JVM consciente del contenedor | `-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError` |
 | Apagado ordenado | `ENTRYPOINT` en forma *exec* (Java es PID 1 y recibe `SIGTERM`) + `server.shutdown=graceful` |
 | Salud | `HEALTHCHECK` contra `/actuator/health/readiness` |
@@ -180,12 +180,12 @@ El job `sonarcloud` ejecuta el análisis estático con `sonar-maven-plugin` usan
 
 Los resultados se publican en formato SARIF en **GitHub → Security → Code scanning** (alertas visibles para el equipo). Además se genera un **SBOM CycloneDX** de la imagen como artefacto.
 
-Gracias a estos escaneos se detectaron y corrigieron vulnerabilidades reales: se actualizó Spring Boot 3.3.7 → 3.5.16 y se forzaron versiones parcheadas de Tomcat, Jackson, httpcore5, BouncyCastle y el driver de PostgreSQL. Las únicas excepciones están en [.trivyignore](.trivyignore): dos CVEs de `spring-webmvc` cuyo parche solo existe en Spring Framework 7 y que afectan funcionalidades que este servicio no usa (`XsltView` y SSE). Cada una está justificada y **vence el 31-01-2027**, fecha en que el pipeline vuelve a bloquear si no se ha migrado.
+Gracias a estos escaneos se detectaron y corrigieron vulnerabilidades reales: se actualizó Spring Boot 3.3.7 → 3.5.16 y se forzaron versiones parcheadas de Tomcat, Jackson, httpcore5, BouncyCastle httpclient5, Log4j API y el driver de PostgreSQL. Las únicas excepciones están en [.trivyignore](.trivyignore): dos CVEs de `spring-webmvc` cuyo parche solo existe en Spring Framework 7 y que afectan funcionalidades que este servicio no usa (`XsltView` y SSE). Cada una está justificada y **vence el 31-01-2027**, fecha en que el pipeline vuelve a bloquear si no se ha migrado.
 
 ### Hardening aplicado
 * **Pipeline:** permisos mínimos (`permissions: contents: read` y permisos extra solo por job), todas las acciones de GitHub fijadas por SHA de commit (protección de la cadena de suministro), `concurrency` para evitar despliegues simultáneos.
 * **Docker Compose:** `read_only`, `cap_drop: ALL`, `no-new-privileges`, red `backend` interna (la base de datos no se expone), límites de CPU/memoria en todos los servicios.
-* **Kubernetes:** Pod Security Standard `restricted`, `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault`, sin token de ServiceAccount, `ResourceQuota` en el namespace, secretos generados en el despliegue (nunca versionados).
+* **Kubernetes:** Pod Security Standard `restricted`, `runAsNonRoot`, `readOnlyRootFilesystem` (también en PostgreSQL), `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault`, sin token de ServiceAccount, `ResourceQuota` en el namespace, credenciales de base de datos solo en un Secret generado en el despliegue (nunca versionado).
 * **Aplicación:** consola H2 deshabilitada fuera de desarrollo, logs en nivel INFO/WARN, los errores 500 no exponen detalles internos, validación de entrada con Bean Validation sobre un DTO (la entidad JPA no se expone en la API), inyección de dependencias por constructor y sin CORS abierto.
 
 ### Parámetros de escalabilidad
@@ -264,7 +264,7 @@ La debe realizar la dueña del repositorio (**Miichellee1**):
 Despliegue manual en cualquier clúster (por ejemplo kind o minikube):
 ```bash
 kubectl apply -f k8s/00-namespace.yaml
-kubectl -n bdget create secret generic bdget-db-secret --from-literal=DB_PASSWORD='<clave-segura>'
+kubectl -n bdget create secret generic bdget-db-secret --from-literal=DB_USER=bdget --from-literal=DB_PASSWORD='<clave-segura>'
 kubectl apply -f k8s/
 kubectl -n bdget rollout status deployment/bdget-deployment
 kubectl -n bdget get all,hpa,pdb

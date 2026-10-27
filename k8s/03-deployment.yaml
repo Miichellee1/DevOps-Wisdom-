@@ -26,12 +26,12 @@ spec:
     spec:
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
-      # Parametro de gobernanza y seguridad: usuario no-root (UID 1001 definido en el Dockerfile)
+      # Parametro de gobernanza y seguridad: usuario no-root (UID 10001 definido en el Dockerfile)
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       # Reparte las replicas entre nodos para tolerar la caida de uno
@@ -54,6 +54,11 @@ spec:
             - configMapRef:
                 name: bdget-config
           env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: bdget-db-secret
+                  key: DB_USER
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:

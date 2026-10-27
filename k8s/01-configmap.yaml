@@ -1,6 +1,6 @@
 # Configuracion no sensible del microservicio (config fuera de la imagen)
-# La clave de la base de datos NO se versiona: el pipeline crea el Secret "bdget-db-secret"
-# con una clave aleatoria en cada despliegue (ver README, seccion Kubernetes).
+# Las credenciales de la base de datos (usuario y clave) NO se versionan: el pipeline crea el
+# Secret "bdget-db-secret" con una clave aleatoria en cada despliegue (ver README, seccion Kubernetes).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,8 +10,7 @@ metadata:
     app: bdget
 data:
   SPRING_PROFILES_ACTIVE: "prod"
+  # El puerto usa el valor por defecto de PostgreSQL (5432) definido en application-prod.properties
   DB_HOST: "bdget-db"
-  DB_PORT: "5432"
   DB_NAME: "bdget"
-  DB_USER: "bdget"
   JAVA_TOOL_OPTIONS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"

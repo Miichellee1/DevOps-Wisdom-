@@ -31,7 +31,7 @@ LABEL org.opencontainers.image.title="bdget" \
 # Seguridad: se aplican los parches del sistema operativo base y se crea un usuario
 # sin privilegios con UID/GID fijos (los usa Kubernetes en runAsUser)
 RUN apk upgrade --no-cache && \
-    addgroup -S -g 1001 appgroup && adduser -S -u 1001 -G appgroup -s /sbin/nologin appuser
+    addgroup -S -g 10001 appgroup && adduser -S -u 10001 -G appgroup -s /sbin/nologin appuser
 
 WORKDIR /app
 
@@ -39,7 +39,7 @@ WORKDIR /app
 COPY --from=buildstage --chown=appuser:appgroup /app/target/bdget.jar /app/bdget.jar
 
 # Ejecutar como usuario no privilegiado
-USER 1001:1001
+USER 10001:10001
 
 # Puerto expuesto por el microservicio
 EXPOSE 8080
