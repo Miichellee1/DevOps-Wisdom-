@@ -410,6 +410,15 @@ jobs:
       - name: Cargar imagen en el cluster
         run: kind load image-archive bdget-image.tar --name bdget
 
+      # metrics-server entrega el uso de CPU/memoria que necesita el HPA para autoescalar
+      - name: Instalar metrics-server (requerido por el HPA)
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.9.0/components.yaml
+          # En kind los kubelets usan certificados autofirmados
+          kubectl -n kube-system patch deployment metrics-server --type=json \
+            -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+          kubectl -n kube-system rollout status deployment/metrics-server --timeout=180s
+
       - name: Desplegar manifiestos
         run: |
           kubectl apply -f k8s/00-namespace.yaml
@@ -438,6 +447,29 @@ jobs:
           kubectl -n bdget port-forward service/bdget-service 8081:8080 > /dev/null 2>&1 &
           sleep 3
           bash scripts/smoke-test.sh http://localhost:8081
+
+      - name: Verificar autoescalado (HPA leyendo metricas reales)
+        run: |
+          for i in $(seq 1 24); do
+            TARGETS=$(kubectl -n bdget get hpa bdget-hpa -o jsonpath='{.status.currentMetrics[*].resource.current.averageUtilization}')
+            if [ -n "$TARGETS" ]; then
+              echo "HPA activo. Uso actual (CPU% memoria%): ${TARGETS}"
+              kubectl -n bdget get hpa bdget-hpa
+              kubectl -n bdget top pods
+              {
+                echo "## Autoescalado (HPA)"
+                echo ""
+                echo '```'
+                kubectl -n bdget get hpa bdget-hpa
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Esperando metricas del HPA (intento $i)..."
+            sleep 10
+          done
+          echo "::warning::El HPA aun no recibe metricas; el despliegue funciona pero el autoescalado no pudo verificarse."
+          kubectl -n bdget describe hpa bdget-hpa
 
       - name: Historial de despliegues (trazabilidad)
         if: always()
