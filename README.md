@@ -16,7 +16,7 @@
 * **Carrera:** Ingeniería en Informática / Conectividad y Redes
 * **Integrantes:**
   * **Valentina Ruiz** — `va.ruizi@duocuc.cl`
-  * **Michelle Serrano** — `@duocuc.cl`
+  * **Michelle Serrano** — `mich.serrano@duocuc.cl` (`Miichellee1`)
 * **Repositorio GitHub:** [https://github.com/Miichellee1/DevOps-Wisdom-](https://github.com/Miichellee1/DevOps-Wisdom-)
 
 ---
