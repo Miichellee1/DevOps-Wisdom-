@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bdget-deployment
+  namespace: bdget
+  labels:
+    app: bdget
+    tier: backend
+spec:
+  # Parametro de escalabilidad inicial: 2 replicas para alta disponibilidad (el HPA ajusta de 2 a 5)
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: bdget
+  template:
+    metadata:
+      labels:
+        app: bdget
+        tier: backend
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      # Parametro de gobernanza y seguridad: usuario no-root (UID 10001 definido en el Dockerfile)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # Reparte las replicas entre nodos para tolerar la caida de uno
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: bdget
+      containers:
+        - name: bdget-container
+          # El pipeline reemplaza la imagen por la etiquetada con el SHA del commit (trazabilidad)
+          image: bdget:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: bdget-config
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: bdget-db-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: bdget-db-secret
+                  key: DB_PASSWORD
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # Ajuste de parametros de desempeno y limites de recursos (IE3 / IE5)
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          # Sonda de arranque: da tiempo a Spring Boot antes de evaluar liveness
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          # Sonda de disponibilidad (Readiness Probe): incluye la conexion a la base de datos
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          # Sonda de supervivencia (Liveness Probe)
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 15
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # Unico directorio escribible (Tomcat lo usa para archivos temporales)
+        - name: tmp
+          emptyDir: {}

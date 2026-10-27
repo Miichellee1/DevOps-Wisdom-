@@ -1,0 +1,13 @@
+# Solo se necesita pom.xml y src/ para construir la imagen
+target/
+.git/
+.github/
+.vscode/
+.idea/
+.mvn/
+k8s/
+nginx/
+*.md
+docker-compose*.yml
+.env
+.env.*

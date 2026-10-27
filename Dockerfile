@@ -1,49 +1,57 @@
 # ==============================================================
-# Etapa 1: Build y empaquetado del microservicio (JDK 17 Temurin)
+# Etapa 1: Build y empaquetado del microservicio (Maven + JDK 17)
 # ==============================================================
-FROM eclipse-temurin:17-jdk AS buildstage
-
-RUN apt-get update && apt-get install -y --no-install-recommends maven && rm -rf /var/lib/apt/lists/*
+FROM maven:3.9-eclipse-temurin-17 AS buildstage
 
 WORKDIR /app
 
-# Copiar dependencias y codigo fuente
+# Se copian primero las dependencias para aprovechar la cache de capas:
+# si solo cambia el codigo fuente, no se vuelven a descargar las librerias
 COPY pom.xml .
-COPY src /app/src
+RUN mvn -B -q dependency:go-offline
 
-# Compilacion y empaquetado del artefacto ejecutable
-RUN mvn clean package -DskipTests
+# Compilacion y empaquetado del artefacto ejecutable (las pruebas ya corren en el pipeline)
+COPY src ./src
+RUN mvn -B -q clean package -DskipTests
 
 # ==============================================================
-# Etapa 2: Imagen final de ejecucion liviana y segura (JRE 17)
+# Etapa 2: Imagen final de ejecucion liviana y segura (JRE 17 Alpine)
 # ==============================================================
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:17-jre-alpine
 
-# Metadatos del contenedor (Estandar OCI)
-LABEL maintainer="Duoc UC DevOps Team <va.ruizi@duocuc.cl>"
-LABEL description="bdget - Microservicio REST Spring Boot de gestion de estudiantes"
-LABEL version="1.0.0"
+# Metadatos del contenedor (Estandar OCI). Revision y fecha se inyectan desde el pipeline
+ARG GIT_COMMIT=local
+ARG APP_VERSION=local
+LABEL org.opencontainers.image.title="bdget" \
+      org.opencontainers.image.description="Microservicio REST Spring Boot de gestion de estudiantes" \
+      org.opencontainers.image.source="https://github.com/Miichellee1/DevOps-Wisdom-" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.version="${APP_VERSION}"
 
-# Seguridad: Creacion de usuario y grupo sin privilegios de root (Hardening)
-RUN groupadd -r appgroup && useradd -r -g appgroup -s /sbin/nologin appuser
+# Seguridad: se aplican los parches del sistema operativo base y se crea un usuario
+# sin privilegios con UID/GID fijos (los usa Kubernetes en runAsUser)
+RUN apk upgrade --no-cache && \
+    addgroup -S -g 10001 appgroup && adduser -S -u 10001 -G appgroup -s /sbin/nologin appuser
 
 WORKDIR /app
 
-# Copiar artefacto desde la etapa de compilacion y asignar permisos
-COPY --from=buildstage /app/target/bdget-0.0.1-SNAPSHOT.jar /app/bdget.jar
-RUN chown -R appuser:appgroup /app
+# Copiar artefacto desde la etapa de compilacion con el dueno correcto
+COPY --from=buildstage --chown=appuser:appgroup /app/target/bdget.jar /app/bdget.jar
 
 # Ejecutar como usuario no privilegiado
-USER appuser
+USER 10001:10001
 
 # Puerto expuesto por el microservicio
 EXPOSE 8080
 
-# Parametros optimizados para ejecucion en entornos de nube y contenedores
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
+# Parametros JVM para contenedores: respeta los limites de CPU/RAM del orquestador
+ENV JAVA_TOOL_OPTIONS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom" \
+    GIT_COMMIT=${GIT_COMMIT} \
+    APP_VERSION=${APP_VERSION}
 
-# Verificacion de salud nativa del contenedor (HealthCheck)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD wget -qO- http://localhost:8080/students > /dev/null || exit 1
+# Verificacion de salud nativa del contenedor contra Spring Boot Actuator
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD wget -qO- http://localhost:8080/actuator/health/readiness > /dev/null || exit 1
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/bdget.jar"]
+# Forma exec: java es el PID 1 y recibe SIGTERM para un apagado ordenado
+ENTRYPOINT ["java", "-jar", "/app/bdget.jar"]
