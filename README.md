@@ -302,7 +302,7 @@ kubectl -n bdget get all,hpa,pdb
 *(Cada integrante redacta a continuación su reflexión personal, de forma individual y sin apoyo de IA, explicando su aprendizaje y contribución al proyecto).*
 
 ### 👤 Reflexión de Valentina Ruiz
-> *(Espacio para que Valentina redacte su reflexión personal).*
+Al desarrollar bdget entendi que el código funcional no quiere decir que un software este listo para producción. El mayor desafio y aprendizaje del proyecto fue el uso de pipeline: las métricas de cobertura obligatoria con JaCoCo, la protección de ramas y los Quality Gates me enseñaron a asumir la calidad como algo vital de cada proyecto. Ademas de eso, entendí que la automatización previene que los errores humanos lleguen al entorno operativo
 
 ### 👤 Reflexión de Michelle Serrano
-> *(Espacio para que Michelle redacte su reflexión personal).*
+Este proyecto personalmente me hizo entender mucho mejor la seguridad en el desarrollo de proyectos. A través del uso de Trivy, SonarCloud y la actualización de dependencias, aprendí a identificar vulnerabilidades en el código y en las imagenes de Docker.
