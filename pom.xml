@@ -23,7 +23,7 @@
 		<httpcore5.version>5.4.4</httpcore5.version>
 		<httpclient5.version>5.6.3</httpclient5.version>
 		<log4j2.version>2.25.5</log4j2.version>
-		<bouncycastle.version>1.85.2</bouncycastle.version>
+		<bouncycastle.version>1.86</bouncycastle.version>
 		<jacoco.minimum.coverage>0.80</jacoco.minimum.coverage>
 		<!-- Analisis estatico en SonarCloud (IE3) -->
 		<sonar.organization>miichellee1</sonar.organization>
