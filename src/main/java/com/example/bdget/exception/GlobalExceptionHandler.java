@@ -1,8 +1,5 @@
 package com.example.bdget.exception;
 
-import java.time.LocalDateTime;
-import java.util.HashMap;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -49,8 +46,8 @@ public class GlobalExceptionHandler {
 
         Map<String, Object> response = new HashMap<>();
         response.put("timestamp", LocalDateTime.now());
+        // No se expone el detalle interno de la excepcion al cliente
         response.put("message", "An unexpected error occurred");
-        response.put("details", ex.getMessage());
         response.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
 
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
