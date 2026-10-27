@@ -25,7 +25,7 @@
 
 `bdget` es un microservicio REST desarrollado en **Java 17 + Spring Boot 3.5** para la gestión de estudiantes (CRUD, búsqueda por nombre y conteo). Su ciclo de vida completo está automatizado con un pipeline **CI/CD DevSecOps en GitHub Actions** que:
 
-1. Ejecuta **26 pruebas automatizadas** (unitarias, de controlador y de integración con base de datos) y **bloquea** si la cobertura baja del 80%.
+1. Ejecuta **29 pruebas automatizadas** (unitarias, de controlador y de integración contra H2 y contra **PostgreSQL real con Testcontainers**) y **bloquea** si la cobertura baja del 80%.
 2. Analiza la calidad y seguridad del código con **SonarCloud** y **bloquea** si el *Quality Gate* falla.
 3. Escanea dependencias, secretos e infraestructura como código con **Trivy** y **bloquea** ante vulnerabilidades `CRITICAL`/`HIGH` con parche disponible. **Dependabot** mantiene las dependencias actualizadas.
 4. Construye una **imagen Docker multi-etapa endurecida**, la escanea, genera su **SBOM** y la publica en **GitHub Container Registry** etiquetada con el SHA del commit.
@@ -114,7 +114,7 @@ DevOps-Wisdom-/
 ├── nginx/nginx.conf         → Gateway / balanceador de carga
 ├── scripts/smoke-test.sh    → Smoke test funcional usado por el pipeline
 ├── src/main/...             → Código fuente (Controller, Service, Repository, Model)
-├── src/test/...             → 26 pruebas automatizadas
+├── src/test/...             → 29 pruebas automatizadas
 ├── docker-compose.yml       → Orquestación del entorno cloud simulado
 ├── Dockerfile               → Imagen multi-etapa endurecida
 ├── .trivyignore             → Excepciones de seguridad justificadas y con vencimiento
@@ -149,9 +149,10 @@ El [Dockerfile](Dockerfile) aplica buenas prácticas para entornos cloud:
 |---|---|---|
 | Unitarias de servicio | `StudentServiceImplTest` (8) | Lógica de negocio con Mockito |
 | Controlador / API | `StudentControllerTest` (14) | Códigos HTTP, validaciones (400), recursos inexistentes (404), manejo global de errores |
-| Integración de persistencia | `StudentRepositoryTest` (2) | Consultas JPA reales sobre H2 |
+| Integración de persistencia (H2) | `StudentRepositoryTest` (2) | Consultas JPA sobre H2 en memoria |
+| Integración con PostgreSQL real | `StudentRepositoryPostgresTest` (2) | Las mismas consultas contra **PostgreSQL 16 en un contenedor efímero (Testcontainers)**, el mismo motor que producción |
 | Modelo | `StudentModelTest` (1) | Entidad `Student` |
-| Contexto | `BdgetApplicationTests` (1) | Arranque completo de Spring Boot |
+| Contexto | `BdgetApplicationTests` (2) | Arranque completo de Spring Boot y punto de entrada |
 
 **Políticas de calidad aplicadas en el pipeline (todas bloquean el avance):**
 1. **Todas las pruebas deben pasar** (`./mvnw verify`).
@@ -192,7 +193,7 @@ Gracias a estos escaneos se detectaron y corrigieron vulnerabilidades reales: se
 | Parámetro | Docker Compose | Kubernetes |
 |---|---|---|
 | Réplicas | `APP_REPLICAS` (2 por defecto) + `--scale` | 2 iniciales; HPA de 2 a 5 |
-| Autoescalado | — | CPU > 70% o memoria > 80%, con ventanas de estabilización |
+| Autoescalado | — | CPU > 70% o memoria > 80%, con ventanas de estabilización. El pipeline instala `metrics-server` y verifica que el HPA lea métricas reales |
 | Límites por réplica | 0.5 CPU / 512 MB | requests 200m / 256Mi, limits 500m / 512Mi |
 | Disponibilidad | `restart: on-failure:3`, healthchecks | Rolling update sin caída (`maxUnavailable: 0`), PDB, probes de arranque/readiness/liveness |
 | Balanceo | nginx resuelve dinámicamente las réplicas | Service de Kubernetes |
@@ -209,7 +210,7 @@ graph TD
     V --> I[4. Imagen Docker: build, escaneo, SBOM, push a GHCR]
     I --> C[5. Despliegue Docker Compose + smoke test + escalado]
     S --> C
-    I --> K[6. Despliegue Kubernetes kind + rolling update + smoke test]
+    I --> K[6. Despliegue Kubernetes kind + rolling update + smoke test + HPA]
     S --> K
     C --> R[7. Reporte de trazabilidad]
     K --> R
@@ -222,7 +223,7 @@ graph TD
 | 3 | `security-scan` | IE3 | hay CVEs `CRITICAL`/`HIGH` corregibles o secretos expuestos |
 | 4 | `build-image` | IE1 / IE3 | la imagen tiene CVEs `CRITICAL`/`HIGH` corregibles |
 | 5 | `deploy-compose` | IE4 / IE5 | el entorno no queda sano o el smoke test falla |
-| 6 | `deploy-kubernetes` | IE4 / IE5 | los manifiestos son inválidos, el rollout no termina o el smoke test falla |
+| 6 | `deploy-kubernetes` | IE4 / IE5 | los manifiestos son inválidos, el rollout no termina o el smoke test falla (además verifica que el HPA reciba métricas de `metrics-server`) |
 | 7 | `traceability` | IE4 | — (resume el resultado de todas las etapas) |
 
 **Entornos:** los despliegues desde `main` se registran en el entorno `production` y los de `develop` y PRs en `staging` (pestaña *Environments* del repositorio).
@@ -269,7 +270,7 @@ kubectl apply -f k8s/
 kubectl -n bdget rollout status deployment/bdget-deployment
 kubectl -n bdget get all,hpa,pdb
 ```
-> El HPA necesita `metrics-server` instalado en el clúster para leer el uso de CPU y memoria.
+> El HPA necesita `metrics-server` instalado en el clúster para leer el uso de CPU y memoria. En el pipeline se instala automáticamente en el clúster kind.
 
 ---
 
