@@ -283,20 +283,6 @@ kubectl -n bdget get all,hpa,pdb
 
 ---
 
-## ⚖️ Declaración de Uso Ético de Inteligencia Artificial (Normativa Duoc UC)
-
-1. **Herramientas de IA utilizadas:** Claude (Anthropic), a través de Claude Code.
-2. **Aplicación específica en la evaluación:**
-   * Revisión del repositorio contra la pauta de evaluación para identificar brechas.
-   * Apoyo en la sintaxis del workflow de GitHub Actions, los manifiestos de Kubernetes, `docker-compose.yml` y la configuración de nginx.
-   * Diagnóstico de la falla del escaneo Trivy (límite de peticiones a Maven Central) y de las dependencias vulnerables.
-   * Apoyo en la redacción de pruebas automatizadas adicionales y de esta documentación.
-3. **Validación:** el equipo revisó, ejecutó y validó todo el contenido generado (pruebas locales, despliegue con Docker Compose y ejecución del pipeline).
-4. **Declaración de autoría:** las conclusiones y reflexiones individuales fueron redactadas por cada integrante sin apoyo de IA.
-5. **Referencia institucional:** [https://bibliotecas.duoc.cl/ia](https://bibliotecas.duoc.cl/ia).
-
----
-
 ## 💡 Reflexiones Individuales Obligatorias (Normativa Duoc UC)
 
 *(Cada integrante redacta a continuación su reflexión personal, de forma individual y sin apoyo de IA, explicando su aprendizaje y contribución al proyecto).*
