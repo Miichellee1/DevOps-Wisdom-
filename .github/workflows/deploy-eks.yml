@@ -1,0 +1,224 @@
+name: Despliegue continuo en Amazon EKS con observabilidad
+
+# Despliega la imagen aprobada de bdget en el cluster EKS (Istio + Prometheus + Grafana + Kiali)
+# y publica las metricas del pipeline (cobertura, pruebas, vulnerabilidades, tiempos) en Grafana.
+# Antes de desplegar, las compuertas de calidad, seguridad y cumplimiento deben aprobar:
+# si alguna falla, el job de despliegue NO se ejecuta y el entorno productivo queda protegido.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Etiqueta de la imagen en GHCR a desplegar (ej: latest o sha-xxxxxxx)'
+        required: true
+        default: 'latest'
+      simular_falla_seguridad:
+        description: 'Demostracion IE6: escanear una imagen con vulnerabilidades criticas conocidas'
+        type: boolean
+        default: false
+      simular_falla_calidad:
+        description: 'Demostracion IE6: exigir una cobertura imposible (101%)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-eks
+  cancel-in-progress: false
+
+env:
+  JAVA_VERSION: '17'
+  AWS_REGION: us-east-1
+  CLUSTER: bdget-eks
+  IMAGE_NAME: ghcr.io/miichellee1/devops-wisdom
+  TRIVY_VERSION: v0.76.1
+  TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2,ghcr.io/aquasecurity/trivy-db:2
+  TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1,ghcr.io/aquasecurity/trivy-java-db:1
+
+jobs:
+  # ==============================================================
+  # 1. Compuertas: calidad (pruebas + cobertura), cumplimiento y seguridad de la imagen
+  # ==============================================================
+  compuertas:
+    name: 1. Compuertas de calidad, cumplimiento y seguridad
+    runs-on: ubuntu-latest
+    outputs:
+      inicio: ${{ steps.inicio.outputs.inicio }}
+      cobertura: ${{ steps.calidad.outputs.cobertura }}
+      pruebas: ${{ steps.calidad.outputs.pruebas }}
+      fallidas: ${{ steps.calidad.outputs.fallidas }}
+      criticas: ${{ steps.vulns.outputs.criticas }}
+      altas: ${{ steps.vulns.outputs.altas }}
+      imagen: ${{ steps.imagen.outputs.imagen }}
+    steps:
+      - name: Registrar inicio del pipeline
+        id: inicio
+        run: echo "inicio=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Clonar repositorio
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configurar JDK 17 Temurin
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Auditoria de cumplimiento (politicas del proyecto)
+        run: bash scripts/auditoria/auditoria-cumplimiento.sh
+
+      - name: Pruebas y cobertura minima (BLOQUEA si fallan o la cobertura baja del minimo)
+        env:
+          COBERTURA_MINIMA: ${{ inputs.simular_falla_calidad && '1.01' || '0.80' }}
+        run: |
+          chmod +x mvnw
+          ./mvnw -B verify -Djacoco.minimum.coverage="${COBERTURA_MINIMA}"
+
+      - name: Extraer metricas de calidad
+        id: calidad
+        if: always()
+        run: |
+          COB=$(awk -F, 'NR>1 {m+=$8; c+=$9} END {if (m+c>0) printf "%.1f", (c*100)/(m+c); else print 0}' target/site/jacoco/jacoco.csv 2>/dev/null || echo 0)
+          TOT=$(cat target/surefire-reports/TEST-*.xml 2>/dev/null | grep -o '<testsuite [^>]*tests="[0-9]*"' | grep -o 'tests="[0-9]*"' | grep -o '[0-9]*' | paste -sd+ | bc || echo 0)
+          FAIL=$(cat target/surefire-reports/TEST-*.xml 2>/dev/null | grep -o '<testsuite [^>]*failures="[0-9]*"' | grep -o 'failures="[0-9]*"' | grep -o '[0-9]*' | paste -sd+ | bc || echo 0)
+          echo "cobertura=${COB:-0}" >> "$GITHUB_OUTPUT"
+          echo "pruebas=${TOT:-0}" >> "$GITHUB_OUTPUT"
+          echo "fallidas=${FAIL:-0}" >> "$GITHUB_OUTPUT"
+
+      - name: Definir la imagen a escanear y desplegar
+        id: imagen
+        run: |
+          if [ "${{ inputs.simular_falla_seguridad }}" = "true" ]; then
+            # Imagen publica antigua con vulnerabilidades CRITICAL conocidas: debe detener el pipeline
+            echo "imagen=nginx:1.16.0" >> "$GITHUB_OUTPUT"
+          else
+            echo "imagen=${IMAGE_NAME}:${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Escaneo de la imagen (reporte JSON para el dashboard)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ steps.imagen.outputs.imagen }}
+          format: 'json'
+          output: 'trivy-imagen.json'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          trivyignores: '.trivyignore'
+          exit-code: '0'
+
+      - name: Contar vulnerabilidades
+        id: vulns
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json
+          d = json.load(open("trivy-imagen.json"))
+          vs = [v for r in d.get("Results", []) for v in (r.get("Vulnerabilities") or [])]
+          print("criticas=%d" % sum(v["Severity"] == "CRITICAL" for v in vs))
+          print("altas=%d" % sum(v["Severity"] == "HIGH" for v in vs))
+          EOF
+
+      - name: Security Gate - BLOQUEO por vulnerabilidades CRITICAL/HIGH con parche disponible
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          skip-setup-trivy: true
+          image-ref: ${{ steps.imagen.outputs.imagen }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          trivyignores: '.trivyignore'
+          exit-code: '1'
+
+      - name: Resumen de las compuertas
+        if: always()
+        run: |
+          {
+            echo "## Compuertas antes del despliegue en EKS"
+            echo ""
+            echo "| Control | Resultado |"
+            echo "|---|---|"
+            echo "| Cobertura de pruebas (JaCoCo) | ${{ steps.calidad.outputs.cobertura }}% |"
+            echo "| Pruebas ejecutadas / fallidas | ${{ steps.calidad.outputs.pruebas }} / ${{ steps.calidad.outputs.fallidas }} |"
+            echo "| Imagen escaneada | \`${{ steps.imagen.outputs.imagen }}\` |"
+            echo "| Vulnerabilidades CRITICAL / HIGH (con parche) | ${{ steps.vulns.outputs.criticas }} / ${{ steps.vulns.outputs.altas }} |"
+            echo "| Estado del job | ${{ job.status }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ==============================================================
+  # 2. Despliegue automatizado en Amazon EKS (solo si todas las compuertas aprobaron)
+  # ==============================================================
+  desplegar-eks:
+    name: 2. Despliegue en Amazon EKS y publicacion de metricas
+    needs: compuertas
+    runs-on: ubuntu-latest
+    environment:
+      name: production-eks
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verificar credenciales de AWS
+        run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SESSION_TOKEN" ]; then
+            echo "::error::Faltan los secretos AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY y AWS_SESSION_TOKEN."
+            exit 1
+          fi
+          aws sts get-caller-identity --query Arn --output text
+
+      - name: Conectar kubectl al cluster EKS
+        run: |
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER"
+          kubectl get nodes
+
+      - name: Desplegar bdget y publicar metricas CI/CD
+        env:
+          IMAGE: ${{ needs.compuertas.outputs.imagen }}
+          GIT_COMMIT: ${{ github.sha }}
+          COVERAGE_PERCENT: ${{ needs.compuertas.outputs.cobertura }}
+          TESTS_TOTAL: ${{ needs.compuertas.outputs.pruebas }}
+          TESTS_FAILED: ${{ needs.compuertas.outputs.fallidas }}
+          CRITICAL_VULNS: ${{ needs.compuertas.outputs.criticas }}
+          HIGH_VULNS: ${{ needs.compuertas.outputs.altas }}
+          INICIO_PIPELINE: ${{ needs.compuertas.outputs.inicio }}
+        run: |
+          export PIPELINE_DURATION_SECONDS=$(( $(date +%s) - INICIO_PIPELINE ))
+          bash scripts/eks/desplegar.sh
+          # Se vuelve a publicar con la duracion total ya calculada al terminar el despliegue
+          export PIPELINE_DURATION_SECONDS=$(( $(date +%s) - INICIO_PIPELINE ))
+          export DEPLOY_DURATION_SECONDS=$(kubectl -n bdget get configmap ci-metrics -o jsonpath='{.data.metrics\.txt}' | awk '/^ci_deploy_duration_seconds/ {print $2}')
+          bash scripts/eks/publicar-metricas-ci.sh
+
+      - name: Smoke test en EKS
+        run: |
+          kubectl -n bdget port-forward service/bdget-service 8081:8080 > /dev/null 2>&1 &
+          sleep 5
+          bash scripts/smoke-test.sh http://localhost:8081
+
+      - name: Actualizar el dashboard de Grafana
+        run: bash scripts/eks/importar-dashboard.sh
+
+      - name: Reporte de trazabilidad del despliegue
+        if: always()
+        run: |
+          {
+            echo "## Despliegue en Amazon EKS"
+            echo ""
+            echo "| Dato | Valor |"
+            echo "|---|---|"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Imagen | \`${{ needs.compuertas.outputs.imagen }}\` |"
+            echo "| Cluster | ${CLUSTER} (${AWS_REGION}) |"
+            echo "| Cobertura | ${{ needs.compuertas.outputs.cobertura }}% |"
+            echo "| Autor | @${GITHUB_ACTOR} |"
+            echo ""
+            echo '```'
+            kubectl -n bdget get pods,hpa 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -30,6 +30,19 @@ env:
 
 jobs:
   # ==============================================================
+  # 0. Auditoria Automatizada de Cumplimiento (IE5 EP3)
+  # ==============================================================
+  compliance-audit:
+    name: 0. Auditoria de Cumplimiento (politicas de seguridad y calidad)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Auditoria de cumplimiento (BLOQUEA si alguna politica no se cumple)
+        run: bash scripts/auditoria/auditoria-cumplimiento.sh
+
+  # ==============================================================
   # 1. Pruebas Automatizadas y Politica de Cobertura (IE2)
   # ==============================================================
   build-test:
@@ -225,7 +238,7 @@ jobs:
   # ==============================================================
   build-image:
     name: 4. Construccion, Escaneo y Publicacion de Imagen Docker (OCI)
-    needs: [build-test, security-scan]
+    needs: [build-test, security-scan, compliance-audit]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -488,7 +501,7 @@ jobs:
   # ==============================================================
   traceability:
     name: 7. Reporte de Trazabilidad
-    needs: [build-test, sonarcloud, security-scan, build-image, deploy-compose, deploy-kubernetes]
+    needs: [compliance-audit, build-test, sonarcloud, security-scan, build-image, deploy-compose, deploy-kubernetes]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -509,6 +522,7 @@ jobs:
             echo ""
             echo "| Etapa | Resultado |"
             echo "|---|---|"
+            echo "| 0. Auditoria de cumplimiento | ${{ needs.compliance-audit.result }} |"
             echo "| 1. Pruebas y cobertura | ${{ needs.build-test.result }} |"
             echo "| 2. SonarCloud Quality Gate | ${{ needs.sonarcloud.result }} |"
             echo "| 3. Security Gate (Trivy) | ${{ needs.security-scan.result }} |"
