@@ -30,6 +30,19 @@ env:
 
 jobs:
   # ==============================================================
+  # 0. Auditoria Automatizada de Cumplimiento (IE5 EP3)
+  # ==============================================================
+  compliance-audit:
+    name: 0. Auditoria de Cumplimiento (politicas de seguridad y calidad)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Auditoria de cumplimiento (BLOQUEA si alguna politica no se cumple)
+        run: bash scripts/auditoria/auditoria-cumplimiento.sh
+
+  # ==============================================================
   # 1. Pruebas Automatizadas y Politica de Cobertura (IE2)
   # ==============================================================
   build-test:
@@ -163,11 +176,24 @@ jobs:
           chmod +x mvnw
           ./mvnw -B -q dependency:go-offline
 
+      # Instalacion directa desde la release oficial con verificacion de checksum: no depende de la API
+      # de GitHub, que limita las consultas de los runners compartidos y hacia fallar setup-trivy
+      - name: Instalar Trivy (release oficial verificada por checksum)
+        run: |
+          V="${TRIVY_VERSION#v}"
+          cd /tmp
+          curl --proto "=https" --tlsv1.2 -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_Linux-64bit.tar.gz"
+          curl --proto "=https" --tlsv1.2 -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_checksums.txt"
+          grep " trivy_${V}_Linux-64bit.tar.gz$" "trivy_${V}_checksums.txt" | sha256sum -c -
+          sudo tar -xzf "trivy_${V}_Linux-64bit.tar.gz" -C /usr/local/bin trivy
+          trivy --version
+
       - name: Reporte SARIF de dependencias y secretos (todas las severidades)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
           TRIVY_OFFLINE_SCAN: true
         with:
+          skip-setup-trivy: true
           version: ${{ env.TRIVY_VERSION }}
           scan-type: 'fs'
           scan-ref: '.'
@@ -180,8 +206,8 @@ jobs:
       - name: Reporte SARIF de configuracion IaC (Dockerfile, Compose, Kubernetes)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          version: ${{ env.TRIVY_VERSION }}
           skip-setup-trivy: true
+          version: ${{ env.TRIVY_VERSION }}
           scan-type: 'config'
           scan-ref: '.'
           format: 'sarif'
@@ -209,8 +235,8 @@ jobs:
         env:
           TRIVY_OFFLINE_SCAN: true
         with:
-          version: ${{ env.TRIVY_VERSION }}
           skip-setup-trivy: true
+          version: ${{ env.TRIVY_VERSION }}
           scan-type: 'fs'
           scan-ref: '.'
           scanners: 'vuln,secret'
@@ -225,7 +251,7 @@ jobs:
   # ==============================================================
   build-image:
     name: 4. Construccion, Escaneo y Publicacion de Imagen Docker (OCI)
-    needs: [build-test, security-scan]
+    needs: [build-test, security-scan, compliance-audit]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -272,9 +298,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Instalacion directa desde la release oficial con verificacion de checksum: no depende de la API
+      # de GitHub, que limita las consultas de los runners compartidos y hacia fallar setup-trivy
+      - name: Instalar Trivy (release oficial verificada por checksum)
+        run: |
+          V="${TRIVY_VERSION#v}"
+          cd /tmp
+          curl --proto "=https" --tlsv1.2 -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_Linux-64bit.tar.gz"
+          curl --proto "=https" --tlsv1.2 -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_checksums.txt"
+          grep " trivy_${V}_Linux-64bit.tar.gz$" "trivy_${V}_checksums.txt" | sha256sum -c -
+          sudo tar -xzf "trivy_${V}_Linux-64bit.tar.gz" -C /usr/local/bin trivy
+          trivy --version
+
       - name: Security Gate de la imagen - BLOQUEO por CRITICAL/HIGH con parche disponible
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          skip-setup-trivy: true
           version: ${{ env.TRIVY_VERSION }}
           image-ref: ${{ steps.vars.outputs.image }}
           format: 'table'
@@ -286,8 +325,8 @@ jobs:
       - name: Generar SBOM de la imagen (CycloneDX)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          version: ${{ env.TRIVY_VERSION }}
           skip-setup-trivy: true
+          version: ${{ env.TRIVY_VERSION }}
           image-ref: ${{ steps.vars.outputs.image }}
           format: 'cyclonedx'
           output: 'sbom-cyclonedx.json'
@@ -488,7 +527,7 @@ jobs:
   # ==============================================================
   traceability:
     name: 7. Reporte de Trazabilidad
-    needs: [build-test, sonarcloud, security-scan, build-image, deploy-compose, deploy-kubernetes]
+    needs: [compliance-audit, build-test, sonarcloud, security-scan, build-image, deploy-compose, deploy-kubernetes]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -509,6 +548,7 @@ jobs:
             echo ""
             echo "| Etapa | Resultado |"
             echo "|---|---|"
+            echo "| 0. Auditoria de cumplimiento | ${{ needs.compliance-audit.result }} |"
             echo "| 1. Pruebas y cobertura | ${{ needs.build-test.result }} |"
             echo "| 2. SonarCloud Quality Gate | ${{ needs.sonarcloud.result }} |"
             echo "| 3. Security Gate (Trivy) | ${{ needs.security-scan.result }} |"

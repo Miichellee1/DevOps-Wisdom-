@@ -1,0 +1,56 @@
+# Generador de trafico dentro de la malla: llama a la API de bdget cada segundo para que
+# Prometheus, Grafana y Kiali muestren peticiones, latencias y errores reales.
+# Incluye llamadas que generan errores esperados (404 y 400) para observar las metricas de error.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trafico
+  namespace: bdget
+  labels:
+    app: trafico
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trafico
+  template:
+    metadata:
+      labels:
+        app: trafico
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: trafico
+          image: curlimages/curl:8.11.1
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              URL=http://bdget-service:8080/students
+              JSON="Content-Type: application/json"
+              while true; do
+                curl -s -o /dev/null "$URL"
+                curl -s -o /dev/null "$URL/count"
+                curl -s -o /dev/null "$URL/search?name=tra"
+                curl -s -o /dev/null -X POST -H "$JSON" -d '{"name":"Trafico"}' "$URL"
+                curl -s -o /dev/null "$URL/999999"
+                curl -s -o /dev/null -X POST -H "$JSON" -d '{"name":"1nv@lido"}' "$URL"
+                sleep 1
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
