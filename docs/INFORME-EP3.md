@@ -113,12 +113,17 @@ El workflow [`.github/workflows/deploy-eks.yml`](../.github/workflows/deploy-eks
 
 Las credenciales del laboratorio son temporales, por eso se guardan como secretos (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`) y se renuevan en cada sesión del Learner Lab.
 
+**Ejecución del despliegue automatizado** (imagen `sha-b3674af`, commit `b3674af` de `main`): compuertas aprobadas en 1 min 44 s, despliegue en EKS en 5 min 29 s y **7 min 22 s de pipeline completo**, sin comandos manuales ([12a](evidencias/12a-despliegue-automatico-eks-exitoso.png)). El reporte del job enlaza commit → imagen → clúster → cobertura → autora y lista los pods desplegados con esa versión ([12b](evidencias/12b-despliegue-automatico-trazabilidad.png)). El dashboard de Grafana reflejó de inmediato las métricas enviadas por el pipeline ([12c](evidencias/12c-grafana-metricas-desde-pipeline.png)).
+
+![Despliegue automatizado en EKS](evidencias/12a-despliegue-automatico-eks-exitoso.png)
+
 ### 3.4 Resultado
 
 - 2 nodos `Ready`, Istio y sus complementos `Running` ([01a](evidencias/01a-cluster-pods-hpa.png)).
 - Pods de la app con **2/2 contenedores** (app + sidecar).
 - El **HPA escaló de 2 a 4 réplicas** por el consumo de CPU durante el arranque de Spring Boot, y luego se estabilizó con CPU 8 % de 70 % y memoria 64 % de 80 % ([01b](evidencias/01b-hpa-y-consumo-recursos.png)).
-- Despliegue completo en **276 segundos**.
+- Despliegue manual inicial en **276 segundos**; despliegue automatizado desde GitHub Actions en **4,8 minutos** (7 min 22 s contando las compuertas).
+- Durante el *rolling update* del despliegue automatizado el HPA llegó al máximo de **5 réplicas** por el pico de CPU de cada pod nuevo, y luego volvió a bajar al estabilizarse (CPU 10 % de 70 %): autoescalado en ambas direcciones ([12b](evidencias/12b-despliegue-automatico-trazabilidad.png)).
 
 ---
 
@@ -221,13 +226,27 @@ fields @timestamp, user.username, verb, objectRef.resource, objectRef.name
 3. **El HPA escaló a 4 réplicas** al ver el pico de CPU del arranque. El dashboard y `kubectl top` mostraron que luego el consumo baja a entre 13 y 34 milicores de CPU por réplica; esto indica que los *requests* de CPU podrían bajarse y el escalado ajustarse para no sobredimensionar.
 4. **El panel de errores (92 por minuto) quedó en naranjo:** al cruzarlo con el gráfico por código HTTP vimos que son solo 400 y 404 (errores del cliente) y 0 % de 5xx; la disponibilidad real del servicio es 100 %.
 5. **Trivy dejó de instalarse en el pipeline** ("unable to find v0.76.1"): el log mostró que el instalador de la acción consulta la API de GitHub sin autenticación y los runners compartidos superan el límite de consultas. Lo distinguimos de una vulnerabilidad real porque el reporte ni siquiera se generó. Decidimos instalar Trivy descargando la release oficial directamente y **verificando su checksum SHA-256**, lo que además fortalece la cadena de suministro del pipeline.
+6. **La imagen `latest` se volvió vulnerable con el tiempo:** la primera ejecución del despliegue automatizado escaneó la imagen publicada el 3 de noviembre y encontró **5 vulnerabilidades HIGH** divulgadas después de su construcción; el pipeline bloqueó el despliegue aunque el código, las pruebas (29/0) y la cobertura (100 %) estaban correctos ([10b](evidencias/10b-ie6-trivy-bloquea-imagen-vulnerable-real.png), [10c](evidencias/10c-ie6-resumen-compuertas-5-high.png)). Decidimos desplegar siempre una imagen recién construida y escaneada, identificada por el SHA del commit (`sha-b3674af`) en lugar de `latest`, lo que además mejora la trazabilidad.
 
 ---
 
 ## 8. Detención del pipeline ante fallas críticas (IE6)
 
-| Falla | Mecanismo | Efecto | Evidencia |
-|---|---|---|---|
+| Falla | Tipo | Mecanismo | Efecto | Evidencia |
+|---|---|---|---|---|
+| Inyección de comandos en el workflow (S7630, *BLOCKER*) | **Real** | SonarCloud Quality Gate | Job 2 en rojo, despliegues 5 y 6 omitidos, PR bloqueado hasta corregir | [09](evidencias/09-ie6-sonarcloud-bloquea-inyeccion.png) |
+| Descarga sin HTTPS forzado (S6506) | **Real** | SonarCloud Quality Gate | Pipeline detenido hasta forzar HTTPS y TLS 1.2 | Historial del PR #26 |
+| Imagen `latest` con 5 vulnerabilidades HIGH nuevas | **Real** | Trivy en `deploy-eks.yml` | El despliegue en EKS no se ejecutó | [10b](evidencias/10b-ie6-trivy-bloquea-imagen-vulnerable-real.png), [10c](evidencias/10c-ie6-resumen-compuertas-5-high.png) |
+| Imagen con vulnerabilidades CRITICAL conocidas | Simulada (`simular_falla_seguridad`) | Trivy Security Gate | El despliegue en EKS no se ejecutó | [10](evidencias/10-ie6-falla-seguridad-bloquea-despliegue.png), [10d](evidencias/10d-ie6-trivy-cves-criticas-detectadas.png) |
+| Cobertura bajo el mínimo | Simulada (`simular_falla_calidad`) | `jacoco:check` exige 101 % | El pipeline se detiene en la compuerta de calidad: ni siquiera se escanea la imagen y el despliegue en EKS no se ejecuta | [11](evidencias/11-ie6-falla-calidad-bloquea-despliegue.png), [11b](evidencias/11b-ie6-resumen-compuertas-calidad.png) |
+| Política de cumplimiento incumplida | Preventivo | Auditoría (job 0 / compuertas) | La imagen no se construye ni se despliega | Ejecuciones del pipeline |
+| Merge sin checks en verde | Preventivo | Branch protection | GitHub no permite el merge | Configuración del repositorio |
+
+En todos los casos el patrón es el mismo: **el job de compuertas termina en error y el job de despliegue queda omitido**, por lo que el entorno productivo en EKS nunca recibe una versión que no cumple las políticas.
+
+![Falla de seguridad bloquea el despliegue](evidencias/10-ie6-falla-seguridad-bloquea-despliegue.png)
+
+---|---|---|---|
 | Vulnerabilidad de seguridad en el código (real) | SonarCloud Quality Gate | Job 2 en rojo; despliegues 5 y 6 omitidos; PR bloqueado | [09](evidencias/09-ie6-sonarcloud-bloquea-inyeccion.png) |
 | Imagen con vulnerabilidades CRITICAL (simulada) | Trivy en `deploy-eks.yml` (`simular_falla_seguridad`) | El despliegue en EKS no se ejecuta | [10](evidencias/10-ie6-falla-seguridad-bloquea-despliegue.png) |
 | Cobertura bajo el mínimo (simulada) | `jacoco:check` en `deploy-eks.yml` (`simular_falla_calidad`) | El despliegue en EKS no se ejecuta | [11](evidencias/11-ie6-falla-calidad-bloquea-despliegue.png) |
