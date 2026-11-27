@@ -4,9 +4,9 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Miichellee1_DevOps-Wisdom&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Miichellee1_DevOps-Wisdom)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Miichellee1_DevOps-Wisdom&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Miichellee1_DevOps-Wisdom)
 
-> **Evaluación Parcial N°2: "Añadiéndole complejidad a nuestro pipeline"**
 > **Asignatura:** Ingeniería DevOps (DOY0101) — Duoc UC
-> **Ponderación Evaluación 1:** 25% | **Ponderación Evaluación 2:** 45%
+> **Evaluación Parcial N°3: "Observabilidad y entornos reales en DevOps"** → 📄 **[Informe EP3](docs/INFORME-EP3.md)** (Amazon EKS, Istio, Prometheus, Grafana, Kiali, CloudWatch y cumplimiento automatizado)
+> **Evaluación Parcial N°2: "Añadiéndole complejidad a nuestro pipeline"** → este README
 
 ---
 
