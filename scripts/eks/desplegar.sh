@@ -11,8 +11,13 @@ INICIO=$(date +%s)
 
 echo "==> Imagen a desplegar: ${IMAGE}"
 
-echo "==> StorageClass gp3 (volumen persistente de PostgreSQL)"
-kubectl apply -f k8s/eks/storageclass-gp3.yaml
+# Con PERSISTENCIA=ebs se usa un disco EBS gp3 (requiere el complemento aws-ebs-csi-driver con permisos).
+# Por defecto (AWS Academy) PostgreSQL usa un volumen efimero porque el LabRole no permite crear discos.
+PERSISTENCIA="${PERSISTENCIA:-efimera}"
+if [ "$PERSISTENCIA" = "ebs" ]; then
+  echo "==> StorageClass gp3 (volumen persistente de PostgreSQL)"
+  kubectl apply -f k8s/eks/storageclass-gp3.yaml
+fi
 
 echo "==> Namespace con inyeccion de Istio y cuota de recursos"
 kubectl apply -f k8s/eks/00-namespace-istio.yaml
@@ -29,6 +34,9 @@ RENDER=$(mktemp -d)
 for f in 01-configmap 02-database 03-deployment 04-service 05-hpa 06-pdb; do
   cp "k8s/${f}.yaml" "${RENDER}/"
 done
+if [ "$PERSISTENCIA" != "ebs" ]; then
+  cp k8s/eks/02-database-efimera.yaml "${RENDER}/02-database.yaml"
+fi
 sed -i "s#image: bdget:local#image: ${IMAGE}#" "${RENDER}/03-deployment.yaml"
 kubectl apply -f "${RENDER}/"
 
