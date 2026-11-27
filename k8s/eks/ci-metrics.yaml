@@ -1,0 +1,62 @@
+# Exportador de metricas del pipeline CI/CD para Prometheus.
+# El script scripts/eks/publicar-metricas-ci.sh escribe en el ConfigMap "ci-metrics" los valores
+# del ultimo despliegue (cobertura, pruebas, tiempo de despliegue, vulnerabilidades, commit) y este
+# pod los publica en formato Prometheus. Prometheus lo descubre por las anotaciones prometheus.io/*
+# y Grafana los muestra en el dashboard "bdget - DevOps" junto a las metricas de ejecucion.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ci-metrics
+  namespace: bdget
+  labels:
+    app: ci-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ci-metrics
+  template:
+    metadata:
+      labels:
+        app: ci-metrics
+      annotations:
+        # Sin sidecar: Prometheus lo consulta directamente por HTTP
+        sidecar.istio.io/inject: "false"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics.txt"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: exportador
+          image: busybox:1.37
+          command: ["httpd", "-f", "-p", "8080", "-h", "/www"]
+          ports:
+            - containerPort: 8080
+              name: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "16Mi"
+            limits:
+              cpu: "50m"
+              memory: "32Mi"
+          volumeMounts:
+            - name: metricas
+              mountPath: /www
+      volumes:
+        - name: metricas
+          configMap:
+            name: ci-metrics
+            optional: true
