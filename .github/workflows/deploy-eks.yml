@@ -87,15 +87,24 @@ jobs:
           echo "pruebas=${TOT:-0}" >> "$GITHUB_OUTPUT"
           echo "fallidas=${FAIL:-0}" >> "$GITHUB_OUTPUT"
 
+      # Los datos que ingresa quien ejecuta el workflow se pasan como variables de entorno y se validan:
+      # nunca se insertan directamente en el script (evita inyeccion de comandos, regla Sonar S7630)
       - name: Definir la imagen a escanear y desplegar
         id: imagen
+        env:
+          ETIQUETA: ${{ inputs.image_tag }}
+          SIMULAR_FALLA_SEGURIDAD: ${{ inputs.simular_falla_seguridad }}
         run: |
-          if [ "${{ inputs.simular_falla_seguridad }}" = "true" ]; then
+          if [ "$SIMULAR_FALLA_SEGURIDAD" = "true" ]; then
             # Imagen publica antigua con vulnerabilidades CRITICAL conocidas: debe detener el pipeline
             echo "imagen=nginx:1.16.0" >> "$GITHUB_OUTPUT"
-          else
-            echo "imagen=${IMAGE_NAME}:${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          if ! [[ "$ETIQUETA" =~ ^[A-Za-z0-9._-]{1,64}$ ]]; then
+            echo "::error::Etiqueta de imagen no valida: solo se permiten letras, numeros, punto, guion y guion bajo."
+            exit 1
+          fi
+          echo "imagen=${IMAGE_NAME}:${ETIQUETA}" >> "$GITHUB_OUTPUT"
 
       - name: Escaneo de la imagen (reporte JSON para el dashboard)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -134,17 +143,25 @@ jobs:
 
       - name: Resumen de las compuertas
         if: always()
+        env:
+          COBERTURA: ${{ steps.calidad.outputs.cobertura }}
+          PRUEBAS: ${{ steps.calidad.outputs.pruebas }}
+          FALLIDAS: ${{ steps.calidad.outputs.fallidas }}
+          IMAGEN: ${{ steps.imagen.outputs.imagen }}
+          CRITICAS: ${{ steps.vulns.outputs.criticas }}
+          ALTAS: ${{ steps.vulns.outputs.altas }}
+          ESTADO: ${{ job.status }}
         run: |
           {
             echo "## Compuertas antes del despliegue en EKS"
             echo ""
             echo "| Control | Resultado |"
             echo "|---|---|"
-            echo "| Cobertura de pruebas (JaCoCo) | ${{ steps.calidad.outputs.cobertura }}% |"
-            echo "| Pruebas ejecutadas / fallidas | ${{ steps.calidad.outputs.pruebas }} / ${{ steps.calidad.outputs.fallidas }} |"
-            echo "| Imagen escaneada | \`${{ steps.imagen.outputs.imagen }}\` |"
-            echo "| Vulnerabilidades CRITICAL / HIGH (con parche) | ${{ steps.vulns.outputs.criticas }} / ${{ steps.vulns.outputs.altas }} |"
-            echo "| Estado del job | ${{ job.status }} |"
+            echo "| Cobertura de pruebas (JaCoCo) | ${COBERTURA}% |"
+            echo "| Pruebas ejecutadas / fallidas | ${PRUEBAS} / ${FALLIDAS} |"
+            echo "| Imagen escaneada | \`${IMAGEN}\` |"
+            echo "| Vulnerabilidades CRITICAL / HIGH (con parche) | ${CRITICAS} / ${ALTAS} |"
+            echo "| Estado del job | ${ESTADO} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ==============================================================
@@ -206,6 +223,9 @@ jobs:
 
       - name: Reporte de trazabilidad del despliegue
         if: always()
+        env:
+          IMAGEN: ${{ needs.compuertas.outputs.imagen }}
+          COBERTURA: ${{ needs.compuertas.outputs.cobertura }}
         run: |
           {
             echo "## Despliegue en Amazon EKS"
@@ -213,9 +233,9 @@ jobs:
             echo "| Dato | Valor |"
             echo "|---|---|"
             echo "| Commit | \`${GITHUB_SHA}\` |"
-            echo "| Imagen | \`${{ needs.compuertas.outputs.imagen }}\` |"
+            echo "| Imagen | \`${IMAGEN}\` |"
             echo "| Cluster | ${CLUSTER} (${AWS_REGION}) |"
-            echo "| Cobertura | ${{ needs.compuertas.outputs.cobertura }}% |"
+            echo "| Cobertura | ${COBERTURA}% |"
             echo "| Autor | @${GITHUB_ACTOR} |"
             echo ""
             echo '```'
