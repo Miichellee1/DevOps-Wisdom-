@@ -1,0 +1,28 @@
+# Namespace para el despliegue en Amazon EKS con malla de servicios Istio.
+# Diferencia con k8s/00-namespace.yaml: el init container de Istio (istio-init) necesita
+# las capabilities NET_ADMIN y NET_RAW para redirigir el trafico al sidecar, por lo que el
+# perfil "restricted" se deja en modo advertencia (warn) y no en modo bloqueo (enforce).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bdget
+  labels:
+    app.kubernetes.io/part-of: bdget
+    # Inyeccion automatica del sidecar de Istio en cada pod nuevo del namespace
+    istio-injection: enabled
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: restricted
+---
+# Gobernanza: cuota ajustada para incluir el sidecar de Istio en cada pod (hasta 5 replicas por HPA)
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: bdget-quota
+  namespace: bdget
+spec:
+  hard:
+    requests.cpu: "3"
+    requests.memory: 4Gi
+    limits.cpu: "20"
+    limits.memory: 12Gi
+    pods: "15"
