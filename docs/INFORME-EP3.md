@@ -220,7 +220,7 @@ fields @timestamp, user.username, verb, objectRef.resource, objectRef.name
 2. **El driver EBS CSI falló** (`CrashLoopBackOff`) porque el `LabRole` no permite crear discos: decidimos usar un volumen efímero para PostgreSQL en EKS y documentarlo como limitación.
 3. **El HPA escaló a 4 réplicas** al ver el pico de CPU del arranque. El dashboard y `kubectl top` mostraron que luego el consumo baja a entre 13 y 34 milicores de CPU por réplica; esto indica que los *requests* de CPU podrían bajarse y el escalado ajustarse para no sobredimensionar.
 4. **El panel de errores (92 por minuto) quedó en naranjo:** al cruzarlo con el gráfico por código HTTP vimos que son solo 400 y 404 (errores del cliente) y 0 % de 5xx; la disponibilidad real del servicio es 100 %.
-5. **Un fallo transitorio de Trivy** al descargar su base de datos detuvo el pipeline: lo distinguimos de una vulnerabilidad real porque el reporte no alcanzó a generarse, y re-ejecutamos el job.
+5. **Trivy dejó de instalarse en el pipeline** ("unable to find v0.76.1"): el log mostró que el instalador de la acción consulta la API de GitHub sin autenticación y los runners compartidos superan el límite de consultas. Lo distinguimos de una vulnerabilidad real porque el reporte ni siquiera se generó. Decidimos instalar Trivy descargando la release oficial directamente y **verificando su checksum SHA-256**, lo que además fortalece la cadena de suministro del pipeline.
 
 ---
 
