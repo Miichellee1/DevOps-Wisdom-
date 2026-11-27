@@ -182,8 +182,8 @@ jobs:
         run: |
           V="${TRIVY_VERSION#v}"
           cd /tmp
-          curl -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_Linux-64bit.tar.gz"
-          curl -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_checksums.txt"
+          curl --proto "=https" --tlsv1.2 -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_Linux-64bit.tar.gz"
+          curl --proto "=https" --tlsv1.2 -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_checksums.txt"
           grep " trivy_${V}_Linux-64bit.tar.gz$" "trivy_${V}_checksums.txt" | sha256sum -c -
           sudo tar -xzf "trivy_${V}_Linux-64bit.tar.gz" -C /usr/local/bin trivy
           trivy --version
@@ -304,8 +304,8 @@ jobs:
         run: |
           V="${TRIVY_VERSION#v}"
           cd /tmp
-          curl -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_Linux-64bit.tar.gz"
-          curl -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_checksums.txt"
+          curl --proto "=https" --tlsv1.2 -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_Linux-64bit.tar.gz"
+          curl --proto "=https" --tlsv1.2 -sSfL --retry 3 -O "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${V}_checksums.txt"
           grep " trivy_${V}_Linux-64bit.tar.gz$" "trivy_${V}_checksums.txt" | sha256sum -c -
           sudo tar -xzf "trivy_${V}_Linux-64bit.tar.gz" -C /usr/local/bin trivy
           trivy --version
